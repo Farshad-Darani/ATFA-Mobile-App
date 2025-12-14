@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
+import '../main.dart';
 
 class SettingsPage extends StatefulWidget {
   final Function(int) onNavigateToTab;
@@ -17,6 +19,43 @@ class _SettingsPageState extends State<SettingsPage> {
   int _refreshRate = 1; // Refresh rate in seconds (1-5)
   bool _showNotifications = true;
   bool _darkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+    // Initialize dark mode based on current theme
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final brightness = Theme.of(context).brightness;
+      setState(() {
+        _darkMode = brightness == Brightness.dark;
+      });
+    });
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _refreshRate = prefs.getInt('refreshRate') ?? 1;
+      _useCelsius = prefs.getBool('useCelsius') ?? true;
+      _useKmh = prefs.getBool('useKmh') ?? true;
+    });
+  }
+
+  Future<void> _saveRefreshRate(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('refreshRate', value);
+  }
+
+  Future<void> _saveTemperatureUnit(bool useCelsius) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('useCelsius', useCelsius);
+  }
+
+  Future<void> _saveSpeedUnit(bool useKmh) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('useKmh', useKmh);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +85,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _useCelsius = value;
                     });
+                    _saveTemperatureUnit(value);
                   },
                 ),
                 const Divider(height: 1),
@@ -58,6 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _useKmh = value;
                     });
+                    _saveSpeedUnit(value);
                   },
                 ),
               ],
@@ -81,6 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _refreshRate = value.toInt();
                     });
+                    _saveRefreshRate(_refreshRate);
                   },
                 ),
               ],
@@ -121,6 +163,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() {
                       _darkMode = value;
                     });
+                    // Update app theme
+                    final appState = ATFAApp.of(context);
+                    appState?.setThemeMode(
+                      value ? ThemeMode.dark : ThemeMode.light,
+                    );
                   },
                 ),
               ],

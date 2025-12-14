@@ -8,6 +8,7 @@ class DiagnosticDataCard extends StatelessWidget {
   final String parameter;
   final IconData icon;
   final VoidCallback? onTap;
+  final String? unit; // Optional unit override
 
   const DiagnosticDataCard({
     super.key,
@@ -16,6 +17,7 @@ class DiagnosticDataCard extends StatelessWidget {
     required this.parameter,
     required this.icon,
     this.onTap,
+    this.unit,
   });
 
   @override
@@ -127,20 +129,20 @@ class DiagnosticDataCard extends StatelessWidget {
   }
 
   String _formatValue(double value, String parameter) {
-    String unit = _getUnit(parameter);
+    String unitText = unit ?? _getUnit(parameter);
 
     switch (parameter) {
       case 'batteryVoltage':
-        return '${value.toStringAsFixed(1)}$unit';
+        return '${value.toStringAsFixed(1)}$unitText';
       case 'speed':
       case 'rpm':
       case 'coolantTemp':
       case 'throttlePosition':
       case 'engineLoad':
       case 'fuelLevel':
-        return '${value.toInt()}$unit';
+        return '${value.toInt()}$unitText';
       default:
-        return '${value.toStringAsFixed(1)}$unit';
+        return '${value.toStringAsFixed(1)}$unitText';
     }
   }
 
@@ -180,15 +182,16 @@ class DiagnosticDataCard extends StatelessWidget {
           children: [
             Text(
               'Current Value: ${_formatValue(value, parameter)}',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: status.color,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Status: ${status.message}',
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: status.color),
             ),
             const SizedBox(height: 12),
             Text(

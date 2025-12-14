@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../widgets/diagnostic_data_card.dart';
 import '../widgets/gauge_widget.dart';
@@ -27,10 +28,14 @@ class _LiveDataPageState extends State<LiveDataPage>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   late AnimationController _rotationController;
+  int _refreshRate = 1; // Default 1 second
+  bool _useCelsius = true; // Temperature unit preference
+  bool _useKmh = true; // Speed unit preference
 
   @override
   void initState() {
     super.initState();
+    _loadPreferences();
     // Don't auto-start - let user control when to start
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
@@ -45,12 +50,39 @@ class _LiveDataPageState extends State<LiveDataPage>
     )..repeat();
   }
 
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _refreshRate = prefs.getInt('refreshRate') ?? 1;
+      _useCelsius = prefs.getBool('useCelsius') ?? true;
+      _useKmh = prefs.getBool('useKmh') ?? true;
+    });
+  }
+
+  double _convertSpeed(double kmh) {
+    return _useKmh ? kmh : kmh * 0.621371; // Convert to mph
+  }
+
+  double _convertTemperature(double celsius) {
+    return _useCelsius
+        ? celsius
+        : (celsius * 9 / 5) + 32; // Convert to Fahrenheit
+  }
+
+  String _getSpeedUnit() {
+    return _useKmh ? 'km/h' : 'mph';
+  }
+
+  String _getTemperatureUnit() {
+    return _useCelsius ? '°C' : '°F';
+  }
+
   void _startDataStream() {
     setState(() {
       _isDataStreaming = true;
     });
 
-    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _dataTimer = Timer.periodic(Duration(seconds: _refreshRate), (timer) {
       _updateDataFromDevice();
     });
 
@@ -96,7 +128,7 @@ class _LiveDataPageState extends State<LiveDataPage>
     setState(() {
       _isPaused = false;
     });
-    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _dataTimer = Timer.periodic(Duration(seconds: _refreshRate), (timer) {
       _updateDataFromDevice();
     });
     _updateDataFromDevice();
@@ -220,10 +252,12 @@ class _LiveDataPageState extends State<LiveDataPage>
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primarySlate,
+                                  backgroundColor: isConnected
+                                      ? AppTheme.primarySlate
+                                      : Colors.grey[400],
                                   foregroundColor: isConnected
                                       ? Colors.white
-                                      : Colors.white.withOpacity(0.6),
+                                      : Colors.grey[600],
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 24,
                                     vertical: 12,
@@ -257,7 +291,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                           ? Icons.play_arrow
                                           : Icons.pause,
                                       size: 32,
-                                      color: AppTheme.primarySlate,
+                                      color: AppTheme.secondaryBlue,
                                     ),
                                   ),
                                   const SizedBox(width: 40),
@@ -266,7 +300,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                     icon: const Icon(
                                       Icons.refresh,
                                       size: 32,
-                                      color: AppTheme.primarySlate,
+                                      color: AppTheme.secondaryBlue,
                                     ),
                                   ),
                                 ],
@@ -383,9 +417,9 @@ class _LiveDataPageState extends State<LiveDataPage>
               Flexible(
                 child: GaugeWidget(
                   title: 'Speed',
-                  value: (_currentData['speed'] ?? 0).toDouble(),
-                  maxValue: 160,
-                  unit: 'km/h',
+                  value: _convertSpeed((_currentData['speed'] ?? 0).toDouble()),
+                  maxValue: _useKmh ? 160 : 100,
+                  unit: _getSpeedUnit(),
                   color: Colors.blue,
                 ),
               ),
@@ -404,9 +438,12 @@ class _LiveDataPageState extends State<LiveDataPage>
             children: [
               DiagnosticDataCard(
                 title: 'Coolant Temp',
-                value: (_currentData['coolantTemp'] ?? 0).toDouble(),
+                value: _convertTemperature(
+                  (_currentData['coolantTemp'] ?? 0).toDouble(),
+                ),
                 parameter: 'coolantTemp',
                 icon: Icons.thermostat,
+                unit: _getTemperatureUnit(),
               ),
               DiagnosticDataCard(
                 title: 'Throttle Position',
@@ -563,6 +600,8 @@ class _LiveDataPageState extends State<LiveDataPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Reload preferences when page becomes visible
+    _loadPreferences();
     // Just refresh the UI to reflect current connection status
     if (mounted) {
       setState(() {});
