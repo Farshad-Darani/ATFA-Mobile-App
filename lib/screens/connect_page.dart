@@ -43,6 +43,16 @@ class _ConnectPageState extends State<ConnectPage> {
   void initState() {
     super.initState();
     _initializeBluetooth();
+    
+    // Set up automatic disconnection handler
+    _bluetoothService.onDeviceDisconnected = () {
+      if (mounted) {
+        setState(() {
+          _connectedDevice = null;
+        });
+        _showErrorSnackBar('Device disconnected');
+      }
+    };
   }
 
   void _startTipsCarousel() {
@@ -592,6 +602,7 @@ class _ConnectPageState extends State<ConnectPage> {
     _stopScan();
     _tipsTimer?.cancel();
     _tipsPageController.dispose();
+    _bluetoothService.onDeviceDisconnected = null;
     super.dispose();
   }
 }

@@ -10,6 +10,14 @@ class BluetoothService {
   BluetoothCharacteristic? _writeCharacteristic;
   BluetoothCharacteristic? _readCharacteristic;
   bool _isInitialized = false;
+  StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
+  
+  // For collecting OBD responses
+  String _responseBuffer = '';
+  final _responseController = StreamController<String>.broadcast();
+  
+  // Disconnection callback
+  void Function()? onDeviceDisconnected;
 
   BluetoothDevice? get connectedDevice => _connectedDevice;
   bool get isConnected => _connectedDevice != null && _isInitialized;
@@ -37,6 +45,16 @@ class BluetoothService {
       await device.connect(timeout: const Duration(seconds: 10));
       _connectedDevice = device;
       print('✅ Bluetooth connection established');
+
+      // Listen for disconnection
+      _connectionStateSubscription?.cancel();
+      _connectionStateSubscription = device.connectionState.listen((state) {
+        print('📡 Connection state changed: $state');
+        if (state == BluetoothConnectionState.disconnected) {
+          print('⚠️ Device disconnected unexpectedly!');
+          _handleDisconnection();
+        }
+      });
 
       // Discover services and characteristics
       print('🔍 Discovering services...');
@@ -77,6 +95,18 @@ class BluetoothService {
             print(
               '✅ Using fallback read characteristic: ${characteristic.uuid}',
             );
+            
+            // Enable notifications if available
+            if (characteristic.properties.notify) {
+              await characteristic.setNotifyValue(true);
+              characteristic.lastValueStream.listen((value) {
+                final response = String.fromCharCodes(value);
+                print('📨 Notification received: $response');
+                _responseBuffer += response;
+                _responseController.add(response);
+              });
+              print('✅ Notifications enabled on ${characteristic.uuid}');
+            }
           }
         }
       }
@@ -127,12 +157,26 @@ class BluetoothService {
 
   Future<void> disconnect() async {
     if (_connectedDevice != null) {
+      _connectionStateSubscription?.cancel();
+      _connectionStateSubscription = null;
       await _connectedDevice!.disconnect();
-      _connectedDevice = null;
-      _writeCharacteristic = null;
-      _readCharacteristic = null;
-      _isInitialized = false;
+      _handleDisconnection();
     }
+  }
+
+  void _handleDisconnection() {
+    print('🔌 Cleaning up connection...');
+    _connectedDevice = null;
+    _writeCharacteristic = null;
+    _readCharacteristic = null;
+    _isInitialized = false;
+    _responseBuffer = '';
+    
+    // Notify listeners (UI) about disconnection
+    if (onDeviceDisconnected != null) {
+      onDeviceDisconnected!();
+    }
+    print('✅ Disconnection handled');
   }
 
   Future<String> _sendCommand(String command) async {
@@ -141,52 +185,57 @@ class BluetoothService {
     }
 
     try {
+      // Clear the response buffer
+      _responseBuffer = '';
+      
       // Send command using write characteristic
       final commandBytes = '$command\r'.codeUnits;
       await _writeCharacteristic!.write(commandBytes, withoutResponse: false);
+      print('📤 Sent command: $command');
 
-      // Wait for response
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Wait for response through notifications
+      final completer = Completer<String>();
+      Timer? timeout;
+      
+      // Listen for response
+      final subscription = _responseController.stream.listen((data) {
+        // Check if we have a complete response
+        // OBD responses end with '>' or contain the response we're looking for
+        if (_responseBuffer.contains('>') || 
+            _responseBuffer.contains('41') ||
+            _responseBuffer.contains('OK') ||
+            _responseBuffer.contains('ELM')) {
+          if (!completer.isCompleted) {
+            final response = _responseBuffer.trim();
+            print('✅ Complete response received: $response');
+            completer.complete(response);
+            timeout?.cancel();
+          }
+        }
+      });
 
-      // Try to read response
-      String responseString = '';
+      // Set a timeout
+      timeout = Timer(const Duration(seconds: 2), () {
+        if (!completer.isCompleted) {
+          subscription.cancel();
+          if (_responseBuffer.isNotEmpty) {
+            print('⏱️ Timeout - returning partial response: $_responseBuffer');
+            completer.complete(_responseBuffer.trim());
+          } else {
+            print('⏱️ Timeout - no response received');
+            completer.completeError('Timeout waiting for response');
+          }
+        }
+      });
 
-      if (_readCharacteristic != null && _readCharacteristic!.properties.read) {
-        // Use read characteristic if available
-        final response = await _readCharacteristic!.read();
-        responseString = String.fromCharCodes(response).trim();
-      } else if (_writeCharacteristic!.properties.read) {
-        // Fallback: try to read from write characteristic
-        final response = await _writeCharacteristic!.read();
-        responseString = String.fromCharCodes(response).trim();
-      } else {
-        // If no read capability, return simulated response for testing
-        responseString = _simulateOBDResponse(command);
-      }
-
-      print('Command: $command, Response: $responseString');
-      return responseString;
+      final response = await completer.future;
+      subscription.cancel();
+      
+      print('Command: $command, Response: $response');
+      return response;
     } catch (e) {
       print('Failed to send command $command: $e');
       throw Exception('Failed to send command: $e');
-    }
-  }
-
-  String _simulateOBDResponse(String command) {
-    // Simulate basic OBD responses for testing
-    switch (command) {
-      case 'ATZ':
-        return 'ELM327 v1.5';
-      case 'ATE0':
-        return 'OK';
-      case 'ATSP0':
-        return 'OK';
-      case '010C':
-        return '41 0C 1A 80'; // Example RPM response
-      case '010D':
-        return '41 0D 40'; // Example speed response
-      default:
-        return 'OK';
     }
   }
 
@@ -347,9 +396,24 @@ class BluetoothService {
     return results;
   }
 
+  // Helper function to extract OBD response from raw data
+  String _extractOBDResponse(String rawResponse) {
+    // Remove common artifacts: >, newlines, carriage returns, spaces
+    // Then find the line that starts with 41 (OBD response code)
+    final lines = rawResponse.split(RegExp(r'[\r\n]'));
+    for (final line in lines) {
+      final cleaned = line.trim().replaceAll('>', '').trim();
+      if (cleaned.startsWith('41') || cleaned.startsWith('43')) {
+        return cleaned;
+      }
+    }
+    return rawResponse; // Fallback to original
+  }
+
   int _parseRPM(String response) {
     // Expected format: "41 0C XX XX" where XX XX is the RPM data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 8 && parts.startsWith('410C')) {
       final a = int.parse(parts.substring(4, 6), radix: 16);
       final b = int.parse(parts.substring(6, 8), radix: 16);
@@ -360,7 +424,8 @@ class BluetoothService {
 
   int _parseSpeed(String response) {
     // Expected format: "41 0D XX" where XX is the speed data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 6 && parts.startsWith('410D')) {
       return int.parse(parts.substring(4, 6), radix: 16);
     }
@@ -369,7 +434,8 @@ class BluetoothService {
 
   int _parseCoolantTemp(String response) {
     // Expected format: "41 05 XX" where XX is the temperature data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 6 && parts.startsWith('4105')) {
       final temp = int.parse(parts.substring(4, 6), radix: 16);
       return temp - 40; // Convert to Celsius
@@ -379,7 +445,8 @@ class BluetoothService {
 
   double _parseThrottlePosition(String response) {
     // Expected format: "41 11 XX" where XX is the throttle position data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 6 && parts.startsWith('4111')) {
       final throttle = int.parse(parts.substring(4, 6), radix: 16);
       return (throttle * 100.0) / 255.0; // Convert to percentage
@@ -389,7 +456,8 @@ class BluetoothService {
 
   double _parseEngineLoad(String response) {
     // Expected format: "41 04 XX" where XX is the engine load data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 6 && parts.startsWith('4104')) {
       final load = int.parse(parts.substring(4, 6), radix: 16);
       return (load * 100.0) / 255.0; // Convert to percentage
@@ -399,7 +467,8 @@ class BluetoothService {
 
   double _parseVoltage(String response) {
     // Expected format: "41 42 XX XX" where XX XX is the voltage data
-    final parts = response.replaceAll(' ', '');
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
     if (parts.length >= 8 && parts.startsWith('4142')) {
       final a = int.parse(parts.substring(4, 6), radix: 16);
       final b = int.parse(parts.substring(6, 8), radix: 16);

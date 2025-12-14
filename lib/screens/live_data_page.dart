@@ -17,7 +17,7 @@ class LiveDataPage extends StatefulWidget {
 }
 
 class _LiveDataPageState extends State<LiveDataPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final bt_service.BluetoothService _bluetoothService =
       bt_service.BluetoothService();
   Timer? _dataTimer;
@@ -31,6 +31,9 @@ class _LiveDataPageState extends State<LiveDataPage>
   int _refreshRate = 1; // Default 1 second
   bool _useCelsius = true; // Temperature unit preference
   bool _useKmh = true; // Speed unit preference
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -48,6 +51,13 @@ class _LiveDataPageState extends State<LiveDataPage>
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload preferences when navigating back to this tab
+    _loadPreferences();
   }
 
   Future<void> _loadPreferences() async {
@@ -164,7 +174,9 @@ class _LiveDataPageState extends State<LiveDataPage>
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final isConnected = _bluetoothService.isConnected;
 
     return Scaffold(
@@ -594,18 +606,6 @@ class _LiveDataPageState extends State<LiveDataPage>
     _pulseController.dispose();
     _rotationController.dispose();
     super.dispose();
-  }
-
-  // This method will be called when the user navigates to this page
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reload preferences when page becomes visible
-    _loadPreferences();
-    // Just refresh the UI to reflect current connection status
-    if (mounted) {
-      setState(() {});
-    }
   }
 }
 
