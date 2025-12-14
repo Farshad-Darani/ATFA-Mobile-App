@@ -22,8 +22,8 @@ class DeviceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deviceName = device.platformName.isNotEmpty 
-        ? device.platformName 
+    final deviceName = device.platformName.isNotEmpty
+        ? device.platformName
         : 'Unknown Device';
 
     return Card(
@@ -34,18 +34,16 @@ class DeviceTile extends StatelessWidget {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isConnected 
+                color: isConnected
                     ? AppTheme.primaryBlue.withValues(alpha: 0.1)
                     : const Color(0xFF1E293B).withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                isConnected 
+                isConnected
                     ? Icons.bluetooth_connected
                     : _getDeviceIcon(deviceName),
-                color: isConnected 
-                    ? AppTheme.primaryBlue
-                    : Colors.white,
+                color: isConnected ? AppTheme.primaryBlue : Colors.white,
                 size: 24,
               ),
             ),
@@ -58,15 +56,22 @@ class DeviceTile extends StatelessWidget {
             subtitle: isConnected
                 ? Container(
                     margin: const EdgeInsets.only(top: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       'Connected',
                       style: TextStyle(
-                        color: Colors.grey[700],
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.grey[700],
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -74,14 +79,8 @@ class DeviceTile extends StatelessWidget {
                   )
                 : null,
             trailing: isConnected
-                ? const Icon(
-                    Icons.check_circle,
-                    color: AppTheme.primaryBlue,
-                  )
-                : const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                  ),
+                ? const Icon(Icons.check_circle, color: AppTheme.primaryBlue)
+                : const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: isConnected ? onToggleExpand : onTap,
           ),
           AnimatedSize(
@@ -98,8 +97,13 @@ class DeviceTile extends StatelessWidget {
                           onPressed: onDisconnect,
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.secondarySlate,
-                            side: const BorderSide(color: AppTheme.secondarySlate),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            side: const BorderSide(
+                              color: AppTheme.secondarySlate,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
                           ),
                           icon: const Icon(Icons.bluetooth_disabled),
                           label: const Text('Disconnect Device'),
@@ -116,7 +120,7 @@ class DeviceTile extends StatelessWidget {
 
   IconData _getDeviceIcon(String deviceName) {
     final name = deviceName.toLowerCase();
-    
+
     if (name.contains('elm') || name.contains('obd')) {
       return Icons.car_rental;
     } else if (name.contains('scanner') || name.contains('diagnostic')) {

@@ -146,7 +146,9 @@ class _LiveDataPageState extends State<LiveDataPage>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[900]
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
@@ -218,12 +220,10 @@ class _LiveDataPageState extends State<LiveDataPage>
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: isConnected
-                                      ? AppTheme.primarySlate
-                                      : Colors.grey[300],
+                                  backgroundColor: AppTheme.primarySlate,
                                   foregroundColor: isConnected
                                       ? Colors.white
-                                      : Colors.grey[500],
+                                      : Colors.white.withOpacity(0.6),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 24,
                                     vertical: 12,

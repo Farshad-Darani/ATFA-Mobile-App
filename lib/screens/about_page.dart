@@ -17,7 +17,6 @@ class AboutPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('About ATFA'),
         leading: IconButton(
@@ -46,7 +45,6 @@ class AboutPage extends StatelessWidget {
                       'ATFA GILDAR DIAGNOSTICS INC.',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1E293B),
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -111,12 +109,18 @@ class AboutPage extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppTheme.primarySlate.withOpacity(0.1),
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white.withOpacity(0.1)
+                                : AppTheme.primarySlate.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.shopping_bag_outlined,
-                            color: AppTheme.primarySlate,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : AppTheme.primarySlate,
                             size: 24,
                           ),
                         ),
@@ -124,10 +128,7 @@ class AboutPage extends StatelessWidget {
                         Text(
                           'Our Products',
                           style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E293B),
-                              ),
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -169,12 +170,18 @@ class AboutPage extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppTheme.primarySlate.withOpacity(0.1),
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white.withOpacity(0.1)
+                                : AppTheme.primarySlate.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.star_outline,
-                            color: AppTheme.primarySlate,
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : AppTheme.primarySlate,
                             size: 24,
                           ),
                         ),
@@ -182,10 +189,7 @@ class AboutPage extends StatelessWidget {
                         Text(
                           'Key Features',
                           style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E293B),
-                              ),
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -300,17 +304,24 @@ class AboutPage extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.primarySlate.withOpacity(0.1),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withOpacity(0.1)
+                        : AppTheme.primarySlate.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: AppTheme.primarySlate, size: 24),
+                  child: Icon(
+                    icon,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : AppTheme.primarySlate,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Text(
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1E293B),
                   ),
                 ),
               ],
@@ -318,10 +329,9 @@ class AboutPage extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               content,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[700],
-                height: 1.5,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ],
         ),
@@ -343,7 +353,11 @@ class AboutPage extends StatelessWidget {
         children: [
           Icon(
             icon,
-            color: isComingSoon ? Colors.orange : AppTheme.primarySlate,
+            color: isComingSoon
+                ? Colors.orange
+                : (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : AppTheme.primarySlate),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -358,7 +372,6 @@ class AboutPage extends StatelessWidget {
                         title,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF1E293B),
                         ),
                       ),
                     ),
@@ -413,24 +426,36 @@ class AboutPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.grey[50],
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!, width: 1),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withOpacity(0.1)
+              : Colors.grey[200]!,
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppTheme.primarySlate, size: 20),
+              Icon(
+                icon,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : AppTheme.primarySlate,
+                size: 20,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF1E293B),
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               if (badge != null)
@@ -475,15 +500,19 @@ class AboutPage extends StatelessWidget {
                   Text(
                     linkText,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.primarySlate,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : AppTheme.primarySlate,
                       fontWeight: FontWeight.w500,
                       decoration: TextDecoration.underline,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(
+                  Icon(
                     Icons.open_in_new,
-                    color: AppTheme.primarySlate,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : AppTheme.primarySlate,
                     size: 14,
                   ),
                 ],

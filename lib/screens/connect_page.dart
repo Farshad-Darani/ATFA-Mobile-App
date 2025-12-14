@@ -294,8 +294,10 @@ class _ConnectPageState extends State<ConnectPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: _connectedDevice != null
-                    ? AppTheme.secondaryBlue.withOpacity(0.05)
-                    : Colors.white,
+                    ? Colors.grey[900]
+                    : (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[900]
+                          : Colors.white),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
@@ -314,7 +316,7 @@ class _ConnectPageState extends State<ConnectPage> {
                         : Icons.bluetooth_disabled,
                     size: 40,
                     color: _connectedDevice != null
-                        ? AppTheme.primarySlate
+                        ? Colors.white
                         : Colors.grey,
                   ),
                   const SizedBox(width: 16),
@@ -323,9 +325,7 @@ class _ConnectPageState extends State<ConnectPage> {
                         ? 'Connected to ${_connectedDevice!.platformName}'
                         : 'No Device Connected',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: _connectedDevice != null
-                          ? AppTheme.primarySlate
-                          : null,
+                      color: _connectedDevice != null ? Colors.white : null,
                     ),
                   ),
                 ],
@@ -411,13 +411,20 @@ class _ConnectPageState extends State<ConnectPage> {
                   OutlinedButton.icon(
                     onPressed: _toggleTips,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: _showTips
-                          ? AppTheme.secondarySlate
-                          : AppTheme.primarySlate,
+                      foregroundColor:
+                          Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : (_showTips
+                                ? AppTheme.secondarySlate
+                                : AppTheme.primarySlate),
                       side: BorderSide(
-                        color: _showTips
-                            ? AppTheme.secondarySlate
-                            : AppTheme.primarySlate.withValues(alpha: 0.5),
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withOpacity(0.5)
+                            : (_showTips
+                                  ? AppTheme.secondarySlate
+                                  : AppTheme.primarySlate.withValues(
+                                      alpha: 0.5,
+                                    )),
                       ),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -459,7 +466,6 @@ class _ConnectPageState extends State<ConnectPage> {
                                               .titleMedium
                                               ?.copyWith(
                                                 fontWeight: FontWeight.w600,
-                                                color: AppTheme.primarySlate,
                                               ),
                                         ),
                                       ],
@@ -485,11 +491,10 @@ class _ConnectPageState extends State<ConnectPage> {
                                               child: Text(
                                                 _connectionTips[index],
                                                 textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  color: Colors.grey[700],
-                                                  height: 1.4,
-                                                ),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(height: 1.4),
                                               ),
                                             ),
                                           );
