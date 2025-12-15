@@ -16,6 +16,9 @@ class BluetoothService {
   String _responseBuffer = '';
   final _responseController = StreamController<String>.broadcast();
   
+  // Prevent overlapping data requests
+  bool _isGettingData = false;
+  
   // Disconnection callback
   void Function()? onDeviceDisconnected;
 
@@ -72,11 +75,35 @@ class BluetoothService {
           if (characteristic.uuid.toString().toLowerCase().contains('fff1')) {
             _writeCharacteristic = characteristic;
             print('✅ Found write characteristic: ${characteristic.uuid}');
+            
+            // Enable notifications on fff1 if available (common for OBD dongles)
+            if (characteristic.properties.notify) {
+              await characteristic.setNotifyValue(true);
+              characteristic.lastValueStream.listen((value) {
+                final response = String.fromCharCodes(value);
+                print('📨 Notification received on fff1: $response');
+                _responseBuffer += response;
+                _responseController.add(response);
+              });
+              print('✅ Notifications enabled on fff1');
+            }
           } else if (characteristic.uuid.toString().toLowerCase().contains(
             'fff2',
           )) {
             _readCharacteristic = characteristic;
             print('✅ Found read characteristic: ${characteristic.uuid}');
+            
+            // Also enable notifications on fff2 if available
+            if (characteristic.properties.notify) {
+              await characteristic.setNotifyValue(true);
+              characteristic.lastValueStream.listen((value) {
+                final response = String.fromCharCodes(value);
+                print('📨 Notification received on fff2: $response');
+                _responseBuffer += response;
+                _responseController.add(response);
+              });
+              print('✅ Notifications enabled on fff2');
+            }
           }
 
           // Fallback: use any characteristic with write capability for write
@@ -95,18 +122,7 @@ class BluetoothService {
             print(
               '✅ Using fallback read characteristic: ${characteristic.uuid}',
             );
-            
-            // Enable notifications if available
-            if (characteristic.properties.notify) {
-              await characteristic.setNotifyValue(true);
-              characteristic.lastValueStream.listen((value) {
-                final response = String.fromCharCodes(value);
-                print('📨 Notification received: $response');
-                _responseBuffer += response;
-                _responseController.add(response);
-              });
-              print('✅ Notifications enabled on ${characteristic.uuid}');
-            }
+            // Note: Notifications already set up for fff1/fff2 above, no need to duplicate
           }
         }
       }
@@ -149,6 +165,15 @@ class BluetoothService {
 
       _isInitialized = true;
       print('✅ ELM327 initialized successfully');
+      
+      // Check error codes once during initialization
+      try {
+        print('🔍 Getting error codes...');
+        final errorCodes = await _getErrorCodes();
+        print('✅ Error codes: $errorCodes');
+      } catch (e) {
+        print('Failed to get error codes: $e');
+      }
     } catch (e) {
       print('❌ Failed to initialize ELM327: $e');
       _isInitialized = false;
@@ -185,34 +210,41 @@ class BluetoothService {
     }
 
     try {
-      // Clear the response buffer
-      _responseBuffer = '';
-      
-      // Send command using write characteristic
-      final commandBytes = '$command\r'.codeUnits;
-      await _writeCharacteristic!.write(commandBytes, withoutResponse: false);
-      print('📤 Sent command: $command');
-
       // Wait for response through notifications
       final completer = Completer<String>();
       Timer? timeout;
+      late StreamSubscription subscription;
       
-      // Listen for response
-      final subscription = _responseController.stream.listen((data) {
-        // Check if we have a complete response
-        // OBD responses end with '>' or contain the response we're looking for
-        if (_responseBuffer.contains('>') || 
-            _responseBuffer.contains('41') ||
-            _responseBuffer.contains('OK') ||
-            _responseBuffer.contains('ELM')) {
-          if (!completer.isCompleted) {
+      // Clear buffer RIGHT BEFORE starting listener (to discard any trailing data from previous command)
+      _responseBuffer = '';
+      
+      // Start listening BEFORE sending command
+      subscription = _responseController.stream.listen((data) {
+        // Complete when we have a response ending with '>'
+        if (_responseBuffer.contains('>')) {
+          // For OBD data commands (01XX), require 41/43 response
+          // For init commands (AT), accept any response
+          final isOBDCommand = command.startsWith('01') || command.startsWith('03');
+          final hasValidResponse = !isOBDCommand || 
+                                   _responseBuffer.contains('41') || 
+                                   _responseBuffer.contains('43') ||
+                                   _responseBuffer.contains('UNABLE') ||
+                                   _responseBuffer.contains('NO DATA');
+          
+          if (hasValidResponse && !completer.isCompleted) {
             final response = _responseBuffer.trim();
             print('✅ Complete response received: $response');
             completer.complete(response);
             timeout?.cancel();
+            subscription.cancel();
           }
         }
       });
+      
+      // NOW send command after listener is ready
+      final commandBytes = '$command\r'.codeUnits;
+      await _writeCharacteristic!.write(commandBytes, withoutResponse: false);
+      print('📤 Sent command: $command');
 
       // Set a timeout
       timeout = Timer(const Duration(seconds: 2), () {
@@ -230,9 +262,15 @@ class BluetoothService {
 
       final response = await completer.future;
       subscription.cancel();
+      timeout?.cancel();
       
-      print('Command: $command, Response: $response');
-      return response;
+      // Wait longer for all straggling notifications to finish and settle
+      await Future.delayed(Duration(milliseconds: 150));
+      
+      // Extract only the relevant OBD response line (41/43 line)
+      final cleanedResponse = _extractOBDResponse(response);
+      print('Command: $command, Raw: $response, Cleaned: $cleanedResponse');
+      return cleanedResponse;
     } catch (e) {
       print('Failed to send command $command: $e');
       throw Exception('Failed to send command: $e');
@@ -240,17 +278,25 @@ class BluetoothService {
   }
 
   Future<Map<String, dynamic>> getRealTimeData() async {
-    print(
-      '🔄 getRealTimeData called. Connection status: ${getConnectionStatus()}',
-    );
-
-    if (!isConnected) {
-      print('📱 Not connected - returning simulated data');
-      return getSimulatedData();
+    // Prevent overlapping calls
+    if (_isGettingData) {
+      print('⚠️ Data request already in progress, skipping...');
+      return {};
     }
-
-    print('🚗 Connected! Attempting to get real OBD data...');
+    
+    _isGettingData = true;
+    
     try {
+      print(
+        '🔄 getRealTimeData called. Connection status: ${getConnectionStatus()}',
+      );
+
+      if (!isConnected) {
+        print('📱 Not connected - returning simulated data');
+        return getSimulatedData();
+      }
+
+      print('🚗 Connected! Attempting to get real OBD data...');
       final data = <String, dynamic>{};
 
       // Get Engine RPM (PID 010C)
@@ -263,6 +309,7 @@ class BluetoothService {
         print('❌ Failed to get RPM: $e');
         data['rpm'] = 0;
       }
+      await Future.delayed(Duration(milliseconds: 400)); // Delay between commands
 
       // Get Vehicle Speed (PID 010D)
       try {
@@ -272,6 +319,7 @@ class BluetoothService {
         print('Failed to get speed: $e');
         data['speed'] = 0;
       }
+      await Future.delayed(Duration(milliseconds: 400));
 
       // Get Engine Coolant Temperature (PID 0105)
       try {
@@ -281,6 +329,7 @@ class BluetoothService {
         print('Failed to get coolant temp: $e');
         data['coolantTemp'] = 85;
       }
+      await Future.delayed(Duration(milliseconds: 400));
 
       // Get Throttle Position (PID 0111)
       try {
@@ -290,6 +339,7 @@ class BluetoothService {
         print('Failed to get throttle position: $e');
         data['throttlePosition'] = 0;
       }
+      await Future.delayed(Duration(milliseconds: 400));
 
       // Get Engine Load (PID 0104)
       try {
@@ -299,6 +349,7 @@ class BluetoothService {
         print('Failed to get engine load: $e');
         data['engineLoad'] = 30;
       }
+      await Future.delayed(Duration(milliseconds: 400));
 
       // Get Control Module Voltage (PID 0142)
       try {
@@ -309,15 +360,8 @@ class BluetoothService {
         data['batteryVoltage'] = 12.4;
       }
 
-      // Get Diagnostic Trouble Codes (DTCs)
-      try {
-        print('🔍 Getting error codes...');
-        data['errorCodes'] = await _getErrorCodes();
-        print('✅ Error codes: ${data['errorCodes']}');
-      } catch (e) {
-        print('Failed to get error codes: $e');
-        data['errorCodes'] = <String>[];
-      }
+      // Skip error codes in real-time updates (check only on first connect)
+      data['errorCodes'] = <String>[];
 
       // Set default values for data not yet implemented
       data['fuelLevel'] = 75; // This would need a different approach
@@ -327,6 +371,8 @@ class BluetoothService {
       print('❌ Error getting real-time data: $e');
       print('🔄 Falling back to simulated data');
       return getSimulatedData();
+    } finally {
+      _isGettingData = false;
     }
   }
 
