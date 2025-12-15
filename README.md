@@ -181,13 +181,13 @@ flutter run --hot
 
 ## Support
 
-- **Website**: [www.atfa-diagnostics.com](https://www.atfa-diagnostics.com)
-- **Email**: support@atfa-diagnostics.com
-- **Phone**: +1-800-ATFA-HELP
+For questions or support, please open an issue on GitHub or contact:
+- **Email**: farshad.darani@gmail.com (or your preferred email)
+- **GitHub Issues**: [Report a bug or request a feature](https://github.com/Farshad-Darani/ATFA-Mobile-App/issues)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under a Proprietary License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
