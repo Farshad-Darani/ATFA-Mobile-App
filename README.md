@@ -182,8 +182,9 @@ flutter run --hot
 ## Support
 
 For questions or support, please open an issue on GitHub or contact:
-- **Email**: farshad.darani@gmail.com (or your preferred email)
-- **GitHub Issues**: [Report a bug or request a feature](https://github.com/Farshad-Darani/ATFA-Mobile-App/issues)
+- **Email**: d1.farshad@gmail.com
+- **Email**: support@atfagildar.ca
+- **Website**: [www.atfagildar.ca](https://www.atfagildar.ca)
 
 ## License
 
