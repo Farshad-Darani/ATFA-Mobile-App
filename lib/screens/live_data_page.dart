@@ -587,16 +587,227 @@ class _LiveDataPageState extends State<LiveDataPage>
 
   String _getErrorDescription(String code) {
     switch (code) {
-      case 'P0300':
-        return 'Random/Multiple Cylinder Misfire Detected';
-      case 'P0171':
-        return 'System Too Lean (Bank 1)';
-      case 'P0420':
-        return 'Catalyst System Efficiency Below Threshold';
-      case 'P0101':
-        return 'Mass or Volume Air Flow Circuit Range/Performance Problem';
+      // ── Fuel & Air Metering ──────────────────────────────────────────
+      case 'P0100': return 'Mass or Volume Air Flow Circuit Malfunction';
+      case 'P0101': return 'Mass Air Flow Circuit Range/Performance';
+      case 'P0102': return 'Mass Air Flow Circuit Low Input';
+      case 'P0103': return 'Mass Air Flow Circuit High Input';
+      case 'P0104': return 'Mass Air Flow Circuit Intermittent';
+      case 'P0105': return 'Manifold Absolute Pressure Circuit Malfunction';
+      case 'P0106': return 'MAP Circuit Range/Performance';
+      case 'P0107': return 'MAP Circuit Low Input';
+      case 'P0108': return 'MAP Circuit High Input';
+      case 'P0110': return 'Intake Air Temperature Circuit Malfunction';
+      case 'P0111': return 'Intake Air Temperature Circuit Range/Performance';
+      case 'P0112': return 'Intake Air Temperature Circuit Low Input';
+      case 'P0113': return 'Intake Air Temperature Circuit High Input';
+      case 'P0115': return 'Engine Coolant Temperature Circuit Malfunction';
+      case 'P0116': return 'Engine Coolant Temperature Circuit Range/Performance';
+      case 'P0117': return 'Engine Coolant Temperature Circuit Low Input';
+      case 'P0118': return 'Engine Coolant Temperature Circuit High Input';
+      case 'P0120': return 'Throttle Position Sensor A Circuit Malfunction';
+      case 'P0121': return 'Throttle Position Sensor A Range/Performance';
+      case 'P0122': return 'Throttle Position Sensor A Circuit Low Input';
+      case 'P0123': return 'Throttle Position Sensor A Circuit High Input';
+      case 'P0125': return 'Insufficient Coolant Temperature for Closed Loop Fuel Control';
+      case 'P0128': return 'Coolant Thermostat Below Regulating Temperature';
+      case 'P0130': return 'O2 Sensor Circuit Malfunction (Bank 1, Sensor 1)';
+      case 'P0131': return 'O2 Sensor Circuit Low Voltage (Bank 1, Sensor 1)';
+      case 'P0132': return 'O2 Sensor Circuit High Voltage (Bank 1, Sensor 1)';
+      case 'P0133': return 'O2 Sensor Circuit Slow Response (Bank 1, Sensor 1)';
+      case 'P0134': return 'O2 Sensor Circuit No Activity (Bank 1, Sensor 1)';
+      case 'P0135': return 'O2 Sensor Heater Circuit Malfunction (Bank 1, Sensor 1)';
+      case 'P0136': return 'O2 Sensor Circuit Malfunction (Bank 1, Sensor 2)';
+      case 'P0137': return 'O2 Sensor Circuit Low Voltage (Bank 1, Sensor 2)';
+      case 'P0138': return 'O2 Sensor Circuit High Voltage (Bank 1, Sensor 2)';
+      case 'P0139': return 'O2 Sensor Circuit Slow Response (Bank 1, Sensor 2)';
+      case 'P0140': return 'O2 Sensor Circuit No Activity (Bank 1, Sensor 2)';
+      case 'P0141': return 'O2 Sensor Heater Circuit Malfunction (Bank 1, Sensor 2)';
+      case 'P0150': return 'O2 Sensor Circuit Malfunction (Bank 2, Sensor 1)';
+      case 'P0151': return 'O2 Sensor Circuit Low Voltage (Bank 2, Sensor 1)';
+      case 'P0152': return 'O2 Sensor Circuit High Voltage (Bank 2, Sensor 1)';
+      case 'P0153': return 'O2 Sensor Circuit Slow Response (Bank 2, Sensor 1)';
+      case 'P0155': return 'O2 Sensor Heater Circuit Malfunction (Bank 2, Sensor 1)';
+      case 'P0156': return 'O2 Sensor Circuit Malfunction (Bank 2, Sensor 2)';
+      case 'P0158': return 'O2 Sensor Circuit High Voltage (Bank 2, Sensor 2)';
+      case 'P0161': return 'O2 Sensor Heater Circuit Malfunction (Bank 2, Sensor 2)';
+
+      // ── Fuel System ──────────────────────────────────────────────────
+      case 'P0170': return 'Fuel Trim Malfunction (Bank 1)';
+      case 'P0171': return 'System Too Lean (Bank 1)';
+      case 'P0172': return 'System Too Rich (Bank 1)';
+      case 'P0173': return 'Fuel Trim Malfunction (Bank 2)';
+      case 'P0174': return 'System Too Lean (Bank 2)';
+      case 'P0175': return 'System Too Rich (Bank 2)';
+      case 'P0190': return 'Fuel Rail Pressure Sensor Circuit Malfunction';
+      case 'P0191': return 'Fuel Rail Pressure Sensor Circuit Range/Performance';
+      case 'P0192': return 'Fuel Rail Pressure Sensor Circuit Low Input';
+      case 'P0193': return 'Fuel Rail Pressure Sensor Circuit High Input';
+
+      // ── Misfire ───────────────────────────────────────────────────────
+      case 'P0300': return 'Random/Multiple Cylinder Misfire Detected';
+      case 'P0301': return 'Cylinder 1 Misfire Detected';
+      case 'P0302': return 'Cylinder 2 Misfire Detected';
+      case 'P0303': return 'Cylinder 3 Misfire Detected';
+      case 'P0304': return 'Cylinder 4 Misfire Detected';
+      case 'P0305': return 'Cylinder 5 Misfire Detected';
+      case 'P0306': return 'Cylinder 6 Misfire Detected';
+      case 'P0307': return 'Cylinder 7 Misfire Detected';
+      case 'P0308': return 'Cylinder 8 Misfire Detected';
+
+      // ── Knock & Timing ───────────────────────────────────────────────
+      case 'P0320': return 'Ignition/Distributor Engine Speed Input Circuit Malfunction';
+      case 'P0325': return 'Knock Sensor 1 Circuit Malfunction (Bank 1)';
+      case 'P0326': return 'Knock Sensor 1 Circuit Range/Performance (Bank 1)';
+      case 'P0327': return 'Knock Sensor 1 Circuit Low Input (Bank 1)';
+      case 'P0328': return 'Knock Sensor 1 Circuit High Input (Bank 1)';
+      case 'P0330': return 'Knock Sensor 2 Circuit Malfunction (Bank 2)';
+      case 'P0335': return 'Crankshaft Position Sensor A Circuit Malfunction';
+      case 'P0336': return 'Crankshaft Position Sensor A Circuit Range/Performance';
+      case 'P0340': return 'Camshaft Position Sensor A Circuit Malfunction (Bank 1)';
+      case 'P0341': return 'Camshaft Position Sensor A Circuit Range/Performance (Bank 1)';
+      case 'P0342': return 'Camshaft Position Sensor A Circuit Low Input (Bank 1)';
+      case 'P0343': return 'Camshaft Position Sensor A Circuit High Input (Bank 1)';
+      case 'P0344': return 'Camshaft Position Sensor A Circuit Intermittent (Bank 1)';
+      case 'P0345': return 'Camshaft Position Sensor A Circuit Malfunction (Bank 2)';
+
+      // ── Emission Controls ────────────────────────────────────────────
+      case 'P0400': return 'Exhaust Gas Recirculation Flow Malfunction';
+      case 'P0401': return 'Exhaust Gas Recirculation Flow Insufficient';
+      case 'P0402': return 'Exhaust Gas Recirculation Flow Excessive';
+      case 'P0404': return 'Exhaust Gas Recirculation Circuit Range/Performance';
+      case 'P0405': return 'Exhaust Gas Recirculation Sensor A Circuit Low';
+      case 'P0406': return 'Exhaust Gas Recirculation Sensor A Circuit High';
+      case 'P0410': return 'Secondary Air Injection System Malfunction';
+      case 'P0420': return 'Catalyst System Efficiency Below Threshold (Bank 1)';
+      case 'P0421': return 'Warm Up Catalyst Efficiency Below Threshold (Bank 1)';
+      case 'P0430': return 'Catalyst System Efficiency Below Threshold (Bank 2)';
+      case 'P0440': return 'Evaporative Emission Control System Malfunction';
+      case 'P0441': return 'Evaporative Emission Control System Incorrect Purge Flow';
+      case 'P0442': return 'Evaporative Emission Control System Small Leak Detected';
+      case 'P0443': return 'Evaporative Emission Control System Purge Valve Malfunction';
+      case 'P0444': return 'Evaporative Emission Control System Purge Valve Open Circuit';
+      case 'P0445': return 'Evaporative Emission Control System Purge Valve Shorted';
+      case 'P0446': return 'Evaporative Emission Control System Vent Control Malfunction';
+      case 'P0447': return 'Evaporative Emission Control System Vent Control Open Circuit';
+      case 'P0448': return 'Evaporative Emission Control System Vent Control Shorted';
+      case 'P0449': return 'Evaporative Emission Control System Vent Valve/Solenoid Malfunction';
+      case 'P0450': return 'Evaporative Emission Control System Pressure Sensor Malfunction';
+      case 'P0451': return 'Evaporative Emission Control System Pressure Sensor Range/Performance';
+      case 'P0452': return 'Evaporative Emission Control System Pressure Sensor Low Input';
+      case 'P0453': return 'Evaporative Emission Control System Pressure Sensor High Input';
+      case 'P0455': return 'Evaporative Emission System Large Leak Detected';
+      case 'P0456': return 'Evaporative Emission System Very Small Leak Detected';
+      case 'P0457': return 'Evaporative Emission System Loose Fuel Cap';
+      case 'P0458': return 'Evaporative Emission System Purge Valve Circuit Low';
+      case 'P0459': return 'Evaporative Emission System Purge Valve Circuit High';
+      case 'P0460': return 'Fuel Level Sensor Circuit Malfunction';
+      case 'P0461': return 'Fuel Level Sensor Circuit Range/Performance';
+      case 'P0462': return 'Fuel Level Sensor Circuit Low Input';
+      case 'P0463': return 'Fuel Level Sensor Circuit High Input';
+
+      // ── Vehicle Speed & Idle ─────────────────────────────────────────
+      case 'P0500': return 'Vehicle Speed Sensor Malfunction';
+      case 'P0501': return 'Vehicle Speed Sensor Range/Performance';
+      case 'P0502': return 'Vehicle Speed Sensor Circuit Low Input';
+      case 'P0503': return 'Vehicle Speed Sensor Intermittent/Erratic/High';
+      case 'P0505': return 'Idle Control System Malfunction';
+      case 'P0506': return 'Idle Control System RPM Lower Than Expected';
+      case 'P0507': return 'Idle Control System RPM Higher Than Expected';
+
+      // ── Transmission ─────────────────────────────────────────────────
+      case 'P0560': return 'System Voltage Malfunction';
+      case 'P0562': return 'System Voltage Low';
+      case 'P0563': return 'System Voltage High';
+      case 'P0600': return 'Serial Communication Link Malfunction';
+      case 'P0601': return 'Internal Control Module Memory Check Sum Error';
+      case 'P0602': return 'Control Module Programming Error';
+      case 'P0603': return 'Internal Control Module Keep Alive Memory Error';
+      case 'P0604': return 'Internal Control Module Random Access Memory Error';
+      case 'P0605': return 'Internal Control Module Read Only Memory Error';
+      case 'P0606': return 'PCM Processor Fault';
+      case 'P0700': return 'Transmission Control System Malfunction';
+      case 'P0701': return 'Transmission Control System Range/Performance';
+      case 'P0702': return 'Transmission Control System Electrical Malfunction';
+      case 'P0703': return 'Torque Converter/Brake Switch B Circuit Malfunction';
+      case 'P0705': return 'Transmission Range Sensor Circuit Malfunction (PRNDL Input)';
+      case 'P0706': return 'Transmission Range Sensor Circuit Range/Performance';
+      case 'P0710': return 'Transmission Fluid Temperature Sensor Circuit Malfunction';
+      case 'P0711': return 'Transmission Fluid Temperature Sensor Range/Performance';
+      case 'P0712': return 'Transmission Fluid Temperature Sensor Circuit Low Input';
+      case 'P0713': return 'Transmission Fluid Temperature Sensor Circuit High Input';
+      case 'P0715': return 'Input/Turbine Speed Sensor Circuit Malfunction';
+      case 'P0720': return 'Output Speed Sensor Circuit Malfunction';
+      case 'P0725': return 'Engine Speed Input Circuit Malfunction';
+      case 'P0730': return 'Incorrect Gear Ratio';
+      case 'P0731': return 'Gear 1 Incorrect Ratio';
+      case 'P0732': return 'Gear 2 Incorrect Ratio';
+      case 'P0733': return 'Gear 3 Incorrect Ratio';
+      case 'P0734': return 'Gear 4 Incorrect Ratio';
+      case 'P0735': return 'Gear 5 Incorrect Ratio';
+      case 'P0740': return 'Torque Converter Clutch Circuit Malfunction';
+      case 'P0741': return 'Torque Converter Clutch Circuit Performance or Stuck Off';
+      case 'P0742': return 'Torque Converter Clutch Circuit Stuck On';
+      case 'P0743': return 'Torque Converter Clutch Circuit Electrical Malfunction';
+      case 'P0750': return 'Shift Solenoid A Malfunction';
+      case 'P0755': return 'Shift Solenoid B Malfunction';
+      case 'P0760': return 'Shift Solenoid C Malfunction';
+      case 'P0765': return 'Shift Solenoid D Malfunction';
+      case 'P0770': return 'Shift Solenoid E Malfunction';
+
+      // ── Charging & Battery ───────────────────────────────────────────
+      case 'P0620': return 'Generator Control Circuit Malfunction';
+      case 'P0621': return 'Generator Lamp L Control Circuit Malfunction';
+      case 'P0622': return 'Generator Field F Control Circuit Malfunction';
+
+      // ── Cooling System ───────────────────────────────────────────────
+      case 'P0480': return 'Cooling Fan 1 Control Circuit Malfunction';
+      case 'P0481': return 'Cooling Fan 2 Control Circuit Malfunction';
+      case 'P0482': return 'Cooling Fan 3 Control Circuit Malfunction';
+      case 'P0483': return 'Cooling Fan Rationality Check Malfunction';
+      case 'P0484': return 'Cooling Fan Circuit Over Current';
+      case 'P0485': return 'Cooling Fan Power/Ground Circuit Malfunction';
+
+      // ── Body (B) Codes ───────────────────────────────────────────────
+      case 'B0001': return 'Deployment Commanded (Airbag)';
+      case 'B0002': return 'Driver Frontal Stage 1 Deployment Control';
+      case 'B0010': return 'Right Curtain Deployment Control';
+      case 'B0020': return 'Left Curtain Deployment Control';
+      case 'B0051': return 'Airbag Diagnostic Monitor Internal Failure';
+      case 'B1000': return 'ECU Malfunction';
+      case 'B1001': return 'Option Configuration Error';
+
+      // ── Chassis (C) Codes ────────────────────────────────────────────
+      case 'C0035': return 'Left Front Wheel Speed Sensor Circuit Malfunction';
+      case 'C0036': return 'Left Front Wheel Speed Sensor Circuit Range/Performance';
+      case 'C0040': return 'Right Front Wheel Speed Sensor Circuit Malfunction';
+      case 'C0041': return 'Right Front Wheel Speed Sensor Circuit Range/Performance';
+      case 'C0045': return 'Left Rear Wheel Speed Sensor Circuit Malfunction';
+      case 'C0046': return 'Left Rear Wheel Speed Sensor Circuit Range/Performance';
+      case 'C0050': return 'Right Rear Wheel Speed Sensor Circuit Malfunction';
+      case 'C0051': return 'Right Rear Wheel Speed Sensor Circuit Range/Performance';
+      case 'C0110': return 'ABS Motor Circuit Malfunction';
+      case 'C0121': return 'ABS Valve Relay Circuit Malfunction';
+      case 'C0161': return 'ABS/TCS Brake Switch Circuit Malfunction';
+      case 'C0265': return 'EBCM Relay Circuit Active';
+      case 'C0266': return 'EBCM Relay Circuit Open/Shorted';
+      case 'C0550': return 'Electronic Control Unit Malfunction';
+      case 'C0800': return 'Device Power Circuit Low Voltage';
+
+      // ── Network (U) Codes ────────────────────────────────────────────
+      case 'U0001': return 'High Speed CAN Communication Bus Malfunction';
+      case 'U0010': return 'Medium Speed CAN Communication Bus Malfunction';
+      case 'U0073': return 'Control Module Communication Bus Off';
+      case 'U0100': return 'Lost Communication with ECM/PCM';
+      case 'U0101': return 'Lost Communication with TCM';
+      case 'U0121': return 'Lost Communication with Anti-Lock Brake System Control Module';
+      case 'U0122': return 'Lost Communication with Vehicle Dynamics Control Module';
+      case 'U0155': return 'Lost Communication with Instrument Panel Cluster Control Module';
+      case 'U0164': return 'Lost Communication with HVAC Control Module';
+      case 'U0401': return 'Invalid Data Received from ECM/PCM';
+
       default:
-        return 'Generic error code';
+        return 'Unknown fault code — consult a mechanic';
     }
   }
 
