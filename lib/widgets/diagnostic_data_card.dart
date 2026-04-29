@@ -45,9 +45,10 @@ class DiagnosticDataCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     icon,
@@ -57,7 +58,7 @@ class DiagnosticDataCard extends StatelessWidget {
                     size: 24,
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
+                  Flexible(
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -65,25 +66,21 @@ class DiagnosticDataCard extends StatelessWidget {
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  _buildStatusIndicator(status.level),
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatValue(value, parameter),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: status.level == diag.DiagnosticLevel.normal
-                          ? AppTheme.secondaryBlue
-                          : status.color,
-                    ),
-                  ),
-                ],
+              Text(
+                _formatValue(value, parameter),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: status.level == diag.DiagnosticLevel.normal
+                      ? AppTheme.secondaryBlue
+                      : status.color,
+                ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
@@ -96,7 +93,13 @@ class DiagnosticDataCard extends StatelessWidget {
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
+              if (status.level != diag.DiagnosticLevel.normal) ...
+                [
+                  const SizedBox(height: 6),
+                  _buildStatusIndicator(status.level),
+                ],
             ],
           ),
         ),

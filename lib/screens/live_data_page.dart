@@ -413,10 +413,9 @@ class _LiveDataPageState extends State<LiveDataPage>
 
           // Main gauges
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
+              Expanded(
                 child: GaugeWidget(
                   title: 'RPM',
                   value: (_currentData['rpm'] ?? 0).toDouble(),
@@ -426,7 +425,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                 ),
               ),
               const SizedBox(width: 16),
-              Flexible(
+              Expanded(
                 child: GaugeWidget(
                   title: 'Speed',
                   value: _convertSpeed((_currentData['speed'] ?? 0).toDouble()),

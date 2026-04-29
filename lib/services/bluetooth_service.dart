@@ -262,7 +262,7 @@ class BluetoothService {
 
       final response = await completer.future;
       subscription.cancel();
-      timeout?.cancel();
+      timeout.cancel();
       
       // Wait longer for all straggling notifications to finish and settle
       await Future.delayed(Duration(milliseconds: 150));

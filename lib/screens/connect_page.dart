@@ -214,7 +214,19 @@ class _ConnectPageState extends State<ConnectPage> {
   Future<void> _disconnectDevice() async {
     if (_connectedDevice != null) {
       try {
+        // Suppress the onDeviceDisconnected callback during manual disconnect
+        // so we don't show two snackbars
+        _bluetoothService.onDeviceDisconnected = null;
         await _bluetoothService.disconnect();
+        // Re-register the callback for future unexpected disconnections
+        _bluetoothService.onDeviceDisconnected = () {
+          if (mounted) {
+            setState(() {
+              _connectedDevice = null;
+            });
+            _showErrorSnackBar('Device disconnected');
+          }
+        };
         setState(() {
           _connectedDevice = null;
         });

@@ -137,7 +137,7 @@ class VehicleHealthSummary extends StatelessWidget {
                       ),
                     ),
                   )
-                  .toList(),
+                  ,
             ],
           ],
         ),
