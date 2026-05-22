@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'connect_page.dart';
 import 'live_data_page.dart';
+import 'diagnose_page.dart';
 import 'more_page.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -26,10 +27,14 @@ class _MainNavigationState extends State<MainNavigation> {
         index: _currentIndex,
         children: [
           ConnectPage(
-            onNavigateToMore: () => _navigateToTab(2),
+            onNavigateToMore: () => _navigateToTab(3),
             onNavigateToTab: _navigateToTab,
           ),
-          LiveDataPage(onNavigateToConnect: () => _navigateToTab(0)),
+          LiveDataPage(
+            onNavigateToConnect: () => _navigateToTab(0),
+            onNavigateToAI: () => _navigateToTab(2),
+          ),
+          const DiagnosePage(),
           MorePage(onNavigateToTab: _navigateToTab),
         ],
       ),
@@ -54,6 +59,11 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
             label: 'Live Data',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.auto_awesome_outlined),
+            activeIcon: Icon(Icons.auto_awesome),
+            label: 'Diagnose',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.more_horiz_outlined),

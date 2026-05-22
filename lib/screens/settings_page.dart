@@ -16,7 +16,6 @@ class _SettingsPageState extends State<SettingsPage> {
   // Settings state variables
   bool _useCelsius = true; // Temperature unit
   bool _useKmh = true; // Speed unit
-  int _refreshRate = 1; // Refresh rate in seconds (1-5)
   bool _showNotifications = true;
   bool _darkMode = false;
 
@@ -36,15 +35,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _refreshRate = prefs.getInt('refreshRate') ?? 1;
       _useCelsius = prefs.getBool('useCelsius') ?? true;
       _useKmh = prefs.getBool('useKmh') ?? true;
     });
-  }
-
-  Future<void> _saveRefreshRate(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('refreshRate', value);
   }
 
   Future<void> _saveTemperatureUnit(bool useCelsius) async {
@@ -99,30 +92,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       _useKmh = value;
                     });
                     _saveSpeedUnit(value);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Data Section
-            _buildSectionCard(
-              title: 'Data',
-              children: [
-                _buildSliderTile(
-                  title: 'Refresh Rate',
-                  subtitle:
-                      '$_refreshRate second${_refreshRate > 1 ? 's' : ''}',
-                  icon: Icons.refresh,
-                  value: _refreshRate.toDouble(),
-                  min: 1,
-                  max: 5,
-                  divisions: 4,
-                  onChanged: (value) {
-                    setState(() {
-                      _refreshRate = value.toInt();
-                    });
-                    _saveRefreshRate(_refreshRate);
                   },
                 ),
               ],
@@ -282,74 +251,6 @@ class _SettingsPageState extends State<SettingsPage> {
             value: value,
             onChanged: onChanged,
             activeColor: const Color(0xFF2196F3),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSliderTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withOpacity(0.1)
-                      : AppTheme.primarySlate.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  icon,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : AppTheme.primarySlate,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            activeColor: const Color(0xFF2196F3),
-            onChanged: onChanged,
           ),
         ],
       ),

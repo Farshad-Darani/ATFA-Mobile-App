@@ -242,7 +242,7 @@ class _ConnectPageState extends State<ConnectPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message, textAlign: TextAlign.center),
-          backgroundColor: AppTheme.secondaryBlue,
+          backgroundColor: AppTheme.errorRed,
         ),
       );
     }
@@ -253,7 +253,7 @@ class _ConnectPageState extends State<ConnectPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message, textAlign: TextAlign.center),
-          backgroundColor: AppTheme.primaryBlue,
+          backgroundColor: AppTheme.accentOrange,
         ),
       );
     }
@@ -263,7 +263,7 @@ class _ConnectPageState extends State<ConnectPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.check_circle, size: 16, color: AppTheme.successGreen),
+        Icon(Icons.check_circle, size: 16, color: AppTheme.accentOrange),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -278,7 +278,7 @@ class _ConnectPageState extends State<ConnectPage> {
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: AppTheme.primaryBlue),
+        Icon(icon, size: 20, color: AppTheme.primarySlate),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -313,10 +313,10 @@ class _ConnectPageState extends State<ConnectPage> {
           children: [
             // Connection Status Card
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: _connectedDevice != null
-                    ? Colors.grey[900]
+                    ? AppTheme.accentOrange
                     : (Theme.of(context).brightness == Brightness.dark
                           ? Colors.grey[900]
                           : Colors.white),
@@ -339,7 +339,7 @@ class _ConnectPageState extends State<ConnectPage> {
                     size: 40,
                     color: _connectedDevice != null
                         ? Colors.white
-                        : Colors.grey,
+                        : Colors.grey[400],
                   ),
                   const SizedBox(width: 16),
                   Text(
@@ -347,7 +347,12 @@ class _ConnectPageState extends State<ConnectPage> {
                         ? 'Connected to ${_connectedDevice!.platformName}'
                         : 'No Device Connected',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: _connectedDevice != null ? Colors.white : null,
+                      color: _connectedDevice != null
+                          ? Colors.white
+                          : Colors.grey[500],
+                      fontWeight: _connectedDevice != null
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                 ],
@@ -362,6 +367,8 @@ class _ConnectPageState extends State<ConnectPage> {
                   : _startScan,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primarySlate,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppTheme.primarySlate.withValues(alpha: 0.4),
                 elevation: 0,
                 shadowColor: Colors.transparent,
               ),
@@ -369,7 +376,12 @@ class _ConnectPageState extends State<ConnectPage> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppTheme.accentOrange,
+                        ),
+                      ),
                     )
                   : const Icon(Icons.bluetooth_searching),
               label: Text(_isScanning ? 'Scanning...' : 'Scan for Device'),
@@ -384,7 +396,7 @@ class _ConnectPageState extends State<ConnectPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.devices,
+                            Icons.bluetooth_searching,
                             size: 64,
                             color: Colors.grey[400],
                           ),
@@ -404,22 +416,27 @@ class _ConnectPageState extends State<ConnectPage> {
                       itemCount: _discoveredDevices.length,
                       itemBuilder: (context, index) {
                         final device = _discoveredDevices[index];
-                        return DeviceTile(
-                          device: device,
-                          isConnected: _connectedDevice == device,
-                          isExpanded: _isExpanded && _connectedDevice == device,
-                          onTap: () => _connectToDevice(device),
-                          onDisconnect: () {
-                            setState(() {
-                              _isExpanded = false;
-                            });
-                            _disconnectDevice();
+                        return TapRegion(
+                          onTapOutside: (_) {
+                            if (_isExpanded) setState(() => _isExpanded = false);
                           },
-                          onToggleExpand: () {
-                            setState(() {
-                              _isExpanded = !_isExpanded;
-                            });
-                          },
+                          child: DeviceTile(
+                            device: device,
+                            isConnected: _connectedDevice == device,
+                            isExpanded: _isExpanded && _connectedDevice == device,
+                            onTap: () => _connectToDevice(device),
+                            onDisconnect: () {
+                              setState(() {
+                                _isExpanded = false;
+                              });
+                              _disconnectDevice();
+                            },
+                            onToggleExpand: () {
+                              setState(() {
+                                _isExpanded = !_isExpanded;
+                              });
+                            },
+                          ),
                         );
                       },
                     ),
@@ -430,24 +447,10 @@ class _ConnectPageState extends State<ConnectPage> {
             if (_connectedDevice == null)
               Column(
                 children: [
-                  OutlinedButton.icon(
+                  TextButton.icon(
                     onPressed: _toggleTips,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor:
-                          Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : (_showTips
-                                ? AppTheme.secondarySlate
-                                : AppTheme.primarySlate),
-                      side: BorderSide(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white.withOpacity(0.5)
-                            : (_showTips
-                                  ? AppTheme.secondarySlate
-                                  : AppTheme.primarySlate.withValues(
-                                      alpha: 0.5,
-                                    )),
-                      ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.secondarySlate,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 12,
@@ -477,7 +480,7 @@ class _ConnectPageState extends State<ConnectPage> {
                                       children: [
                                         Icon(
                                           Icons.lightbulb_outline,
-                                          color: AppTheme.secondaryBlue,
+                                          color: AppTheme.accentOrange,
                                           size: 22,
                                         ),
                                         const SizedBox(width: 8),
@@ -539,7 +542,7 @@ class _ConnectPageState extends State<ConnectPage> {
                                           height: 8,
                                           decoration: BoxDecoration(
                                             color: _currentTipIndex == index
-                                                ? AppTheme.secondaryBlue
+                                                ? AppTheme.accentOrange
                                                 : Colors.grey[300],
                                             borderRadius: BorderRadius.circular(
                                               4,

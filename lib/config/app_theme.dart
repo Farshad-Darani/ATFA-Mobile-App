@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // ATFA brand colors
-  static const Color primarySlate = Color(0xFF1E293B);
+   static const Color primarySlate = Color(0xFF1E293B);
   static const Color secondarySlate = Color(0xFF94A3B8);
   static const Color primaryBlue = Color(0xFF1976D2);
-  static const Color secondaryBlue = Color(0xFF2196F3);
+  static const Color secondaryBlue = Color(0xFF94A3B8);
   static const Color accentOrange = Color(0xFFFF9800);
   
   // Status / Data Feedback Colors
@@ -20,16 +20,17 @@ class AppTheme {
   
   static const Color darkGrey = Color(0xFF424242);
   static const Color lightGrey = Color(0xFFF5F5F5);
+  static const Color pageBackground = Color(0xFFF1F5F9);
 
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryBlue,
+        seedColor: primarySlate,
         brightness: Brightness.light,
-        primary: primaryBlue,
-        secondary: secondaryBlue,
-        tertiary: accentOrange,
+        primary: primarySlate,
+        secondary: accentOrange,
+        tertiary: primaryBlue,
         surface: Colors.white,
         onSurface: darkGrey,
         error: errorRed,
@@ -59,9 +60,10 @@ class AppTheme {
         ),
         color: Colors.white,
       ),
+      scaffoldBackgroundColor: pageBackground,
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryBlue,
+          backgroundColor: primarySlate,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
@@ -112,9 +114,9 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryBlue,
         brightness: Brightness.dark,
-        primary: secondaryBlue,
-        secondary: primaryBlue,
-        tertiary: accentOrange,
+        primary: accentOrange,
+        secondary: primarySlate,
+        tertiary: primaryBlue,
         surface: const Color(0xFF1E1E1E),
         onSurface: Colors.white,
         error: errorRed,
@@ -132,7 +134,7 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: primarySlate,
-        selectedItemColor: secondaryBlue,
+        selectedItemColor: accentOrange,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         elevation: 8,
@@ -146,7 +148,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: secondaryBlue,
+          backgroundColor: primarySlate,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(

@@ -50,6 +50,9 @@ dependencies:
   # For storing user preferences
   shared_preferences: ^2.2.2
 
+  # Gemini AI — get your free key at https://aistudio.google.com
+  google_generative_ai: ^0.4.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
+import '../services/ai_service.dart';
 import '../widgets/diagnostic_data_card.dart';
 import '../widgets/gauge_widget.dart';
 import '../widgets/vehicle_health_summary.dart';
@@ -9,8 +10,13 @@ import '../config/app_theme.dart';
 
 class LiveDataPage extends StatefulWidget {
   final VoidCallback? onNavigateToConnect;
+  final VoidCallback? onNavigateToAI;
 
-  const LiveDataPage({super.key, this.onNavigateToConnect});
+  const LiveDataPage({
+    super.key,
+    this.onNavigateToConnect,
+    this.onNavigateToAI,
+  });
 
   @override
   State<LiveDataPage> createState() => _LiveDataPageState();
@@ -20,15 +26,18 @@ class _LiveDataPageState extends State<LiveDataPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final bt_service.BluetoothService _bluetoothService =
       bt_service.BluetoothService();
+  final _aiService = AiService();
   Timer? _dataTimer;
   Map<String, dynamic> _currentData = {};
   bool _isDataStreaming = false;
   bool _isPaused = false;
-  DateTime? _lastUpdateTime;
+  String? _aiInsight;
+  bool _aiInsightLoading = false;
+  DateTime? _lastInsightFetch;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   late AnimationController _rotationController;
-  int _refreshRate = 1; // Default 1 second
+  late AnimationController _ecgController;
   bool _useCelsius = true; // Temperature unit preference
   bool _useKmh = true; // Speed unit preference
 
@@ -51,6 +60,10 @@ class _LiveDataPageState extends State<LiveDataPage>
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
+    _ecgController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat();
   }
 
   @override
@@ -63,7 +76,6 @@ class _LiveDataPageState extends State<LiveDataPage>
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _refreshRate = prefs.getInt('refreshRate') ?? 1;
       _useCelsius = prefs.getBool('useCelsius') ?? true;
       _useKmh = prefs.getBool('useKmh') ?? true;
     });
@@ -92,7 +104,7 @@ class _LiveDataPageState extends State<LiveDataPage>
       _isDataStreaming = true;
     });
 
-    _dataTimer = Timer.periodic(Duration(seconds: _refreshRate), (timer) {
+    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDataFromDevice();
     });
 
@@ -105,7 +117,6 @@ class _LiveDataPageState extends State<LiveDataPage>
       _stopDataStream();
       setState(() {
         _currentData = {};
-        _lastUpdateTime = null;
       });
       return;
     }
@@ -116,8 +127,8 @@ class _LiveDataPageState extends State<LiveDataPage>
           if (mounted && data.isNotEmpty) {
             setState(() {
               _currentData = data;
-              _lastUpdateTime = DateTime.now();
             });
+            _maybeRefreshInsight();
           }
         })
         .catchError((error) {
@@ -138,7 +149,7 @@ class _LiveDataPageState extends State<LiveDataPage>
     setState(() {
       _isPaused = false;
     });
-    _dataTimer = Timer.periodic(Duration(seconds: _refreshRate), (timer) {
+    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDataFromDevice();
     });
     _updateDataFromDevice();
@@ -152,9 +163,20 @@ class _LiveDataPageState extends State<LiveDataPage>
     });
   }
 
-  void _refreshData() {
-    if (_bluetoothService.isConnected) {
-      _updateDataFromDevice();
+  // Refresh AI insight at most once every 30 seconds
+  Future<void> _maybeRefreshInsight() async {
+    final now = DateTime.now();
+    if (_aiInsightLoading) return;
+    if (_lastInsightFetch != null &&
+        now.difference(_lastInsightFetch!).inSeconds < 30) return;
+    _lastInsightFetch = now;
+    setState(() => _aiInsightLoading = true);
+    final insight = await _aiService.getQuickInsight(_currentData);
+    if (mounted) {
+      setState(() {
+        _aiInsight = insight;
+        _aiInsightLoading = false;
+      });
     }
   }
 
@@ -216,7 +238,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                             child: Icon(
                               Icons.circle,
                               size: 12,
-                              color: AppTheme.secondaryBlue,
+                              color: AppTheme.accentOrange,
                             ),
                           ),
                         );
@@ -226,13 +248,17 @@ class _LiveDataPageState extends State<LiveDataPage>
                     Icon(
                       Icons.circle,
                       size: 12,
-                      color: isConnected
-                          ? AppTheme.secondaryBlue
-                          : Colors.grey[600],
+                      color: _isPaused
+                          ? Colors.grey[400]
+                          : (isConnected
+                              ? AppTheme.accentOrange
+                              : Colors.grey[600]),
                     ),
                   const SizedBox(width: 8),
                   Text(
-                    isConnected ? 'Live' : 'Offline',
+                    _isPaused
+                        ? 'Paused'
+                        : (isConnected ? 'Live' : 'Offline'),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -286,7 +312,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                 child: CircularProgressIndicator(
                                   strokeWidth: 5,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppTheme.primarySlate,
+                                    AppTheme.accentOrange,
                                   ),
                                 ),
                               )
@@ -294,25 +320,46 @@ class _LiveDataPageState extends State<LiveDataPage>
                                 key: const ValueKey('controls'),
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // ECG wave — animated orange when live, static grey when paused
+                                  SizedBox(
+                                    width: 80,
+                                    height: 40,
+                                    child: ShaderMask(
+                                      shaderCallback: (bounds) =>
+                                          const LinearGradient(
+                                            colors: [
+                                              Colors.transparent,
+                                              Colors.white,
+                                              Colors.white,
+                                              Colors.transparent,
+                                            ],
+                                            stops: [0.0, 0.18, 0.82, 1.0],
+                                          ).createShader(bounds),
+                                      blendMode: BlendMode.dstIn,
+                                      child: AnimatedBuilder(
+                                        animation: _ecgController,
+                                        builder: (context, _) => CustomPaint(
+                                          painter: _EcgPainter(
+                                            _isPaused ? 0.3 : _ecgController.value,
+                                            _isPaused
+                                                ? Colors.grey.withOpacity(0.4)
+                                                : AppTheme.accentOrange.withOpacity(0.45),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Pause/play icon
                                   IconButton(
                                     onPressed: _isPaused
                                         ? _resumeDataStream
                                         : _pauseDataStream,
                                     icon: Icon(
                                       _isPaused
-                                          ? Icons.play_arrow
-                                          : Icons.pause,
-                                      size: 32,
-                                      color: AppTheme.secondaryBlue,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 40),
-                                  IconButton(
-                                    onPressed: _refreshData,
-                                    icon: const Icon(
-                                      Icons.refresh,
-                                      size: 32,
-                                      color: AppTheme.secondaryBlue,
+                                          ? Icons.play_circle_outline
+                                          : Icons.pause_circle_outline,
+                                      size: 36,
+                                      color: AppTheme.accentOrange,
                                     ),
                                   ),
                                 ],
@@ -408,7 +455,12 @@ class _LiveDataPageState extends State<LiveDataPage>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Vehicle Health Summary Card
-          VehicleHealthSummary(data: _currentData),
+          VehicleHealthSummary(
+            data: _currentData,
+            aiInsight: _aiInsight,
+            aiInsightLoading: _aiInsightLoading,
+            onAskAI: widget.onNavigateToAI,
+          ),
           const SizedBox(height: 16),
 
           // Main gauges
@@ -431,7 +483,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                   value: _convertSpeed((_currentData['speed'] ?? 0).toDouble()),
                   maxValue: _useKmh ? 160 : 100,
                   unit: _getSpeedUnit(),
-                  color: Colors.blue,
+                  color: AppTheme.primarySlate,
                 ),
               ),
             ],
@@ -475,10 +527,13 @@ class _LiveDataPageState extends State<LiveDataPage>
                 icon: Icons.fitness_center,
               ),
               DiagnosticDataCard(
-                title: 'Fuel Level',
-                value: (_currentData['fuelLevel'] ?? 0).toDouble(),
-                parameter: 'fuelLevel',
-                icon: Icons.local_gas_station,
+                title: 'Intake Air Temp',
+                value: _convertTemperature(
+                  (_currentData['intakeAirTemp'] ?? 0).toDouble(),
+                ),
+                parameter: 'intakeAirTemp',
+                icon: Icons.air,
+                unit: _getTemperatureUnit(),
               ),
               Card(
                 elevation: 4,
@@ -815,8 +870,72 @@ class _LiveDataPageState extends State<LiveDataPage>
     _dataTimer?.cancel();
     _pulseController.dispose();
     _rotationController.dispose();
+    _ecgController.dispose();
     super.dispose();
   }
+}
+
+// ECG waveform painter — scrolling heartbeat strip shown during live streaming
+class _EcgPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  _EcgPainter(this.progress, this.color);
+
+  // Normalised QRS+T cycle points (x in 0..60, y offset from centre — positive = up)
+  static const List<Offset> _cycle = [
+    Offset(0, 0),
+    Offset(14, 0),
+    Offset(17, -2),
+    Offset(21, 13),
+    Offset(25, -4),
+    Offset(29, 0),
+    Offset(36, 3.5),
+    Offset(44, 0),
+    Offset(60, 0),
+  ];
+
+  static const double _cycleW = 60.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final cy = size.height / 2;
+    // Scale x so two full cycles fill the canvas width
+    final scaleX = size.width / (_cycleW * 2);
+    // Scroll offset: shifts the waveform left by one cycle over the animation duration
+    final offsetX = -progress * _cycleW * scaleX;
+
+    final path = Path();
+    bool started = false;
+    // Draw enough cycles to fill canvas even while scrolling
+    for (int c = -1; c <= 3; c++) {
+      for (final pt in _cycle) {
+        final x = pt.dx * scaleX + c * _cycleW * scaleX + offsetX;
+        final y = cy - pt.dy;
+        if (!started) {
+          path.moveTo(x, y);
+          started = true;
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+    }
+
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(path, paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_EcgPainter old) =>
+      old.progress != progress || old.color != color;
 }
 
 // Animated dots widget for "Waiting for vehicle data..."

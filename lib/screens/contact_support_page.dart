@@ -274,10 +274,10 @@ class ContactSupportPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.secondaryBlue.withOpacity(0.1),
+                  color: AppTheme.accentOrange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: AppTheme.secondaryBlue, size: 28),
+                child: Icon(icon, color: AppTheme.accentOrange, size: 28),
               ),
               const SizedBox(width: 16),
               Expanded(

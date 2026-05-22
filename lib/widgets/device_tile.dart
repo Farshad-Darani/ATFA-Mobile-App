@@ -35,7 +35,7 @@ class DeviceTile extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isConnected
-                    ? AppTheme.primaryBlue.withValues(alpha: 0.1)
+                    ? AppTheme.accentOrange.withValues(alpha: 0.15)
                     : const Color(0xFF1E293B).withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -43,7 +43,7 @@ class DeviceTile extends StatelessWidget {
                 isConnected
                     ? Icons.bluetooth_connected
                     : _getDeviceIcon(deviceName),
-                color: isConnected ? AppTheme.primaryBlue : Colors.white,
+                color: isConnected ? AppTheme.accentOrange : Colors.white,
                 size: 24,
               ),
             ),
@@ -61,17 +61,13 @@ class DeviceTile extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withOpacity(0.2)
-                          : Colors.grey[200],
+                      color: AppTheme.accentOrange,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
+                    child: const Text(
                       'Connected',
                       style: TextStyle(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.grey[700],
+                        color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -79,7 +75,7 @@ class DeviceTile extends StatelessWidget {
                   )
                 : null,
             trailing: isConnected
-                ? const Icon(Icons.check_circle, color: AppTheme.primaryBlue)
+                ? const Icon(Icons.check_circle, color: AppTheme.accentOrange)
                 : const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: isConnected ? onToggleExpand : onTap,
           ),

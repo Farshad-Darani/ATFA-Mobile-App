@@ -1,0 +1,125 @@
+import 'package:google_generative_ai/google_generative_ai.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETUP: Copy this file to ai_service.dart and paste your Gemini API key below.
+// Get a free key at https://aistudio.google.com → "Get API key"
+// Free tier: 15 requests/min, 1 million tokens/day.
+// ai_service.dart is in .gitignore so your key stays local.
+// TODO (production): replace with a backend proxy so the key is never in the binary.
+// ─────────────────────────────────────────────────────────────────────────────
+const String _geminiApiKey = 'YOUR_GEMINI_API_KEY_HERE';
+
+class AiService {
+  static final AiService _instance = AiService._internal();
+  factory AiService() => _instance;
+
+  AiService._internal() {
+    _model = GenerativeModel(
+      model: 'gemini-2.5-flash',
+      apiKey: _geminiApiKey,
+    );
+  }
+
+  late final GenerativeModel _model;
+  ChatSession? _chatSession;
+
+  bool get isConfigured => _geminiApiKey != 'YOUR_GEMINI_API_KEY_HERE';
+
+  // ── Quick one-shot insight for the health card ──────────────────────────────
+  Future<String> getQuickInsight(Map<String, dynamic> data) async {
+    if (!isConfigured) {
+      return 'Add your Gemini API key in ai_service.dart to enable AI insights.';
+    }
+    try {
+      final response = await _model.generateContent([
+        Content.text(
+          '${_systemContext(data)}\n\n'
+          'Provide one concise insight (1–2 sentences) about the most notable '
+          'finding in this vehicle data. State it directly — no filler phrases, '
+          'no questions.',
+        ),
+      ]);
+      return response.text?.trim() ?? 'Unable to analyze at this time.';
+    } catch (_) {
+      return 'AI analysis unavailable right now.';
+    }
+  }
+
+  // ── Opening analysis when user enters Diagnose tab ─────────────────────────
+  Future<String> getOpeningAnalysis(Map<String, dynamic> vehicleData) async {
+    if (!isConfigured) {
+      return "Add your Gemini API key in ai_service.dart to enable the assistant.\n\nGet a free key at aistudio.google.com";
+    }
+    try {
+      _chatSession = _model.startChat(history: [
+        Content.text(_systemContext(vehicleData)),
+        Content.model([
+          TextPart(
+            "Understood. I'm ATFA Assistant — ready to help with your vehicle diagnostics.",
+          ),
+        ]),
+      ]);
+      final prompt = vehicleData.isEmpty
+          ? 'No live data yet. Briefly introduce yourself and explain what you can help with once diagnostics start.'
+          : 'Provide a brief opening diagnostic summary (3 sentences max). Highlight the 1–2 most important findings.';
+      final response = await _chatSession!.sendMessage(Content.text(prompt));
+      return response.text?.trim() ??
+          "Hello! I'm your ATFA diagnostic assistant. Start Live Data and I'll analyze your vehicle in real time.";
+    } catch (_) {
+      return "Hello! I'm your ATFA diagnostic assistant. Start Live Data and I'll analyze your vehicle in real time.";
+    }
+  }
+
+  // ── Ongoing chat ────────────────────────────────────────────────────────────
+  Future<String> sendMessage(
+    String message,
+    Map<String, dynamic> vehicleData,
+  ) async {
+    if (!isConfigured) {
+      return 'Add your Gemini API key in ai_service.dart to enable the assistant.';
+    }
+    try {
+      _chatSession ??= _model.startChat(history: [
+        Content.text(_systemContext(vehicleData)),
+        Content.model([
+          TextPart(
+            "Understood. I'm ATFA Assistant — ready to help with your vehicle diagnostics.",
+          ),
+        ]),
+      ]);
+      final contextualMessage =
+          '[Current data update]\n${_dataSnapshot(vehicleData)}\n\nUser: $message';
+      final response =
+          await _chatSession!.sendMessage(Content.text(contextualMessage));
+      return response.text?.trim() ?? 'Unable to respond at this time.';
+    } catch (e) {
+      return 'Error communicating with AI: ${e.toString()}';
+    }
+  }
+
+  void resetChat() => _chatSession = null;
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  String _systemContext(Map<String, dynamic> data) {
+    return 'You are ATFA Assistant, an expert automotive diagnostic AI embedded '
+        'in the ATFA app. Be concise, friendly, and use plain language. '
+        'Avoid markdown headers. Keep responses focused.\n\n'
+        '${_dataSnapshot(data)}';
+  }
+
+  String _dataSnapshot(Map<String, dynamic> data) {
+    if (data.isEmpty || data['rpm'] == null) {
+      return 'No live vehicle data is currently available.';
+    }
+    final dtcs = (data['errorCodes'] as List?)?.cast<String>() ?? [];
+    return 'Current vehicle data:\n'
+        '• RPM: ${data['rpm']}\n'
+        '• Speed: ${data['speed']} km/h\n'
+        '• Coolant Temp: ${data['coolantTemp']}°C\n'
+        '• Intake Air Temp: ${data['intakeAirTemp']}°C\n'
+        '• Engine Load: ${(data['engineLoad'] as num?)?.toStringAsFixed(1)}%\n'
+        '• Throttle: ${(data['throttlePosition'] as num?)?.toStringAsFixed(1)}%\n'
+        '• Battery: ${data['batteryVoltage']}V\n'
+        '• Active DTCs: ${dtcs.isEmpty ? 'None' : dtcs.join(', ')}';
+  }
+}

@@ -4,8 +4,17 @@ import '../config/app_theme.dart';
 
 class VehicleHealthSummary extends StatelessWidget {
   final Map<String, dynamic> data;
+  final String? aiInsight;
+  final bool aiInsightLoading;
+  final VoidCallback? onAskAI;
 
-  const VehicleHealthSummary({super.key, required this.data});
+  const VehicleHealthSummary({
+    super.key,
+    required this.data,
+    this.aiInsight,
+    this.aiInsightLoading = false,
+    this.onAskAI,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +111,96 @@ class VehicleHealthSummary extends StatelessWidget {
                 ),
               ],
             ),
-            if (healthReport.recommendations.isNotEmpty) ...[
+            if (aiInsightLoading || aiInsight != null) ...[
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white54),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Colors.white70, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'AI Insight',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (aiInsightLoading)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Analyzing...',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  aiInsight!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              if (onAskAI != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: onAskAI,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Ask AI',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward, color: Colors.white, size: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ] else if (healthReport.recommendations.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Divider(color: Colors.white54),
               const SizedBox(height: 8),
@@ -122,10 +220,7 @@ class VehicleHealthSummary extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            '• ',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                          const Text('• ', style: TextStyle(color: Colors.white)),
                           Expanded(
                             child: Text(
                               rec,
@@ -136,8 +231,7 @@ class VehicleHealthSummary extends StatelessWidget {
                         ],
                       ),
                     ),
-                  )
-                  ,
+                  ),
             ],
           ],
         ),
@@ -184,7 +278,7 @@ class VehicleHealthSummary extends StatelessWidget {
     if (healthScore >= 80) {
       return [AppTheme.primaryBlue, AppTheme.secondaryBlue];
     } else if (healthScore >= 60) {
-      return [AppTheme.warningYellow, AppTheme.warningYellowLight];
+      return [AppTheme.accentOrange, const Color(0xFFFFB74D)];
     } else {
       return [AppTheme.errorRed, AppTheme.errorRedLight];
     }

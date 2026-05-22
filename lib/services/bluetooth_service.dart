@@ -351,20 +351,33 @@ class BluetoothService {
       }
       await Future.delayed(Duration(milliseconds: 400));
 
-      // Get Control Module Voltage (PID 0142)
+      // Get Battery Voltage — try ATRV (ELM327 direct read) first, fall back to PID 0142
       try {
-        final voltageResponse = await _sendCommand('0142');
-        data['batteryVoltage'] = _parseVoltage(voltageResponse);
+        final atrvResponse = await _sendCommand('ATRV');
+        final atrvVoltage = _parseATRV(atrvResponse);
+        if (atrvVoltage != null) {
+          data['batteryVoltage'] = atrvVoltage;
+        } else {
+          final voltageResponse = await _sendCommand('0142');
+          data['batteryVoltage'] = _parseVoltage(voltageResponse);
+        }
       } catch (e) {
         print('Failed to get voltage: $e');
         data['batteryVoltage'] = 12.4;
       }
+      await Future.delayed(Duration(milliseconds: 400));
+
+      // Get Intake Air Temperature (PID 010F)
+      try {
+        final iatResponse = await _sendCommand('010F');
+        data['intakeAirTemp'] = _parseIAT(iatResponse);
+      } catch (e) {
+        print('Failed to get intake air temp: $e');
+        data['intakeAirTemp'] = 20;
+      }
 
       // Skip error codes in real-time updates (check only on first connect)
       data['errorCodes'] = <String>[];
-
-      // Set default values for data not yet implemented
-      data['fuelLevel'] = 75; // This would need a different approach
 
       return data;
     } catch (e) {
@@ -511,6 +524,17 @@ class BluetoothService {
     return 30.0;
   }
 
+  // Parse ATRV response — ELM327 returns e.g. "12.4V" or "12.40V"
+  double? _parseATRV(String response) {
+    final match = RegExp(r'(\d+\.\d+)\s*[Vv]').firstMatch(response);
+    if (match != null) {
+      final v = double.tryParse(match.group(1)!);
+      // Sanity check: valid car voltage is roughly 9–16 V
+      if (v != null && v >= 9.0 && v <= 16.0) return v;
+    }
+    return null;
+  }
+
   double _parseVoltage(String response) {
     // Expected format: "41 42 XX XX" where XX XX is the voltage data
     final cleanResponse = _extractOBDResponse(response);
@@ -521,6 +545,16 @@ class BluetoothService {
       return ((a * 256) + b) / 1000.0; // Convert to volts
     }
     return 12.4;
+  }
+
+  int _parseIAT(String response) {
+    // Expected format: "41 0F XX" — same formula as coolant temp
+    final cleanResponse = _extractOBDResponse(response);
+    final parts = cleanResponse.replaceAll(' ', '');
+    if (parts.length >= 6 && parts.startsWith('410F')) {
+      return int.parse(parts.substring(4, 6), radix: 16) - 40;
+    }
+    return 20;
   }
 
   Future<List<String>> _getErrorCodes() async {
@@ -614,7 +648,7 @@ class BluetoothService {
       'batteryVoltage':
           12.4 + (DateTime.now().millisecondsSinceEpoch % 100) / 100,
       'engineLoad': 30 + (DateTime.now().millisecondsSinceEpoch % 40),
-      'fuelLevel': 75,
+      'intakeAirTemp': 25 + (DateTime.now().millisecondsSinceEpoch % 15),
       'errorCodes': ['P0300', 'P0171'], // Example error codes
     };
   }

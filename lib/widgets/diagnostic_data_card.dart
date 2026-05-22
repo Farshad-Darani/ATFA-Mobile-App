@@ -77,7 +77,7 @@ class DiagnosticDataCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: status.level == diag.DiagnosticLevel.normal
-                      ? AppTheme.secondaryBlue
+                      ? AppTheme.primaryBlue
                       : status.color,
                 ),
                 textAlign: TextAlign.center,

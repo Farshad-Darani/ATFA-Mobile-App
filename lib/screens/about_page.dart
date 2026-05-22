@@ -140,7 +140,7 @@ class AboutPage extends StatelessWidget {
                       description:
                           'Free download for iOS and Android. Professional vehicle diagnostics at your fingertips.',
                       badge: 'FREE',
-                      badgeColor: AppTheme.secondaryBlue,
+                      badgeColor: AppTheme.accentOrange,
                     ),
                     const SizedBox(height: 12),
                     _buildProductItem(
