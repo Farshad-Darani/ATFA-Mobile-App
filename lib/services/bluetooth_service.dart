@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
 
@@ -18,7 +19,24 @@ class BluetoothService {
   
   // Prevent overlapping data requests
   bool _isGettingData = false;
-  
+
+  // Last successfully fetched data — available to any widget without a new BLE request
+  Map<String, dynamic> _lastData = {};
+  DateTime? _lastDataTime;
+  Map<String, dynamic> get lastData => Map<String, dynamic>.from(_lastData);
+
+  /// True only when connected AND data was updated in the last 3 seconds
+  bool get isDataStreaming =>
+      isConnected &&
+      _lastDataTime != null &&
+      DateTime.now().difference(_lastDataTime!).inSeconds < 3;
+
+  /// Notifier updated immediately when the user presses pause/resume in LiveDataPage.
+  /// Listen to this instead of polling for instant strip state changes.
+  final ValueNotifier<bool> isPaused = ValueNotifier(false);
+
+  void setPaused(bool value) => isPaused.value = value;
+
   // Disconnection callback
   void Function()? onDeviceDisconnected;
 
@@ -196,6 +214,7 @@ class BluetoothService {
     _readCharacteristic = null;
     _isInitialized = false;
     _responseBuffer = '';
+    isPaused.value = false; // Reset paused state on disconnect
     
     // Notify listeners (UI) about disconnection
     if (onDeviceDisconnected != null) {
@@ -379,11 +398,15 @@ class BluetoothService {
       // Skip error codes in real-time updates (check only on first connect)
       data['errorCodes'] = <String>[];
 
+      _lastData = Map<String, dynamic>.from(data);
+      _lastDataTime = DateTime.now();
       return data;
     } catch (e) {
       print('❌ Error getting real-time data: $e');
       print('🔄 Falling back to simulated data');
-      return getSimulatedData();
+      final sim = getSimulatedData();
+      if (_lastData.isEmpty) _lastData = Map<String, dynamic>.from(sim);
+      return sim;
     } finally {
       _isGettingData = false;
     }

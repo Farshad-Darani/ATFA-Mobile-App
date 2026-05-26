@@ -140,12 +140,14 @@ class _LiveDataPageState extends State<LiveDataPage>
 
   void _pauseDataStream() {
     _dataTimer?.cancel();
+    _bluetoothService.setPaused(true);
     setState(() {
       _isPaused = true;
     });
   }
 
   void _resumeDataStream() {
+    _bluetoothService.setPaused(false);
     setState(() {
       _isPaused = false;
     });
@@ -157,6 +159,7 @@ class _LiveDataPageState extends State<LiveDataPage>
 
   void _stopDataStream() {
     _dataTimer?.cancel();
+    _bluetoothService.setPaused(false);
     setState(() {
       _isDataStreaming = false;
       _isPaused = false;
