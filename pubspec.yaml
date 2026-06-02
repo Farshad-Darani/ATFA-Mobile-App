@@ -50,8 +50,11 @@ dependencies:
   # For storing user preferences
   shared_preferences: ^2.2.2
 
-  # Gemini AI — get your free key at https://aistudio.google.com
-  google_generative_ai: ^0.4.6
+  # Supabase — auth, database, edge functions
+  supabase_flutter: ^2.8.4
+
+  # HTTP client for Edge Function calls
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

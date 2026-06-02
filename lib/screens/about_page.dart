@@ -111,8 +111,8 @@ class AboutPage extends StatelessWidget {
                           decoration: BoxDecoration(
                             color:
                                 Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white.withOpacity(0.1)
-                                : AppTheme.primarySlate.withOpacity(0.1),
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : AppTheme.primarySlate.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
@@ -172,8 +172,8 @@ class AboutPage extends StatelessWidget {
                           decoration: BoxDecoration(
                             color:
                                 Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white.withOpacity(0.1)
-                                : AppTheme.primarySlate.withOpacity(0.1),
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : AppTheme.primarySlate.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
@@ -305,8 +305,8 @@ class AboutPage extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white.withOpacity(0.1)
-                        : AppTheme.primarySlate.withOpacity(0.1),
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : AppTheme.primarySlate.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -382,7 +382,7 @@ class AboutPage extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
+                          color: Colors.orange.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: Colors.orange, width: 1),
                         ),
@@ -427,12 +427,12 @@ class AboutPage extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).brightness == Brightness.dark
-            ? Colors.white.withOpacity(0.05)
+            ? Colors.white.withValues(alpha: 0.05)
             : Colors.grey[50],
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withOpacity(0.1)
+              ? Colors.white.withValues(alpha: 0.1)
               : Colors.grey[200]!,
           width: 1,
         ),
@@ -465,7 +465,7 @@ class AboutPage extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: (badgeColor ?? Colors.blue).withOpacity(0.1),
+                    color: (badgeColor ?? Colors.blue).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                       color: badgeColor ?? Colors.blue,

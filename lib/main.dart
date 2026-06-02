@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'screens/main_navigation.dart';
+import 'services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase.
+  await SupabaseService.initialize();
 
   // Set preferred orientations to portrait only
   SystemChrome.setPreferredOrientations([
@@ -14,6 +20,10 @@ void main() async {
   ]);
 
   runApp(const ATFAApp());
+
+  // Do not block first frame on a network call; start anonymous session in
+  // the background so iOS launch watchdog does not kill the app.
+  unawaited(SupabaseService.ensureSession());
 }
 
 class ATFAApp extends StatefulWidget {

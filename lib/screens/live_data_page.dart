@@ -6,6 +6,7 @@ import '../services/ai_service.dart';
 import '../widgets/diagnostic_data_card.dart';
 import '../widgets/gauge_widget.dart';
 import '../widgets/vehicle_health_summary.dart';
+import '../widgets/vehicle_offline_prompt.dart';
 import '../config/app_theme.dart';
 
 class LiveDataPage extends StatefulWidget {
@@ -37,7 +38,6 @@ class _LiveDataPageState extends State<LiveDataPage>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   late AnimationController _rotationController;
-  late AnimationController _ecgController;
   bool _useCelsius = true; // Temperature unit preference
   bool _useKmh = true; // Speed unit preference
 
@@ -58,10 +58,6 @@ class _LiveDataPageState extends State<LiveDataPage>
     );
     _rotationController = AnimationController(
       duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat();
-    _ecgController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
       vsync: this,
     )..repeat();
   }
@@ -115,9 +111,6 @@ class _LiveDataPageState extends State<LiveDataPage>
   void _updateDataFromDevice() {
     if (!_bluetoothService.isConnected) {
       _stopDataStream();
-      setState(() {
-        _currentData = {};
-      });
       return;
     }
 
@@ -171,7 +164,9 @@ class _LiveDataPageState extends State<LiveDataPage>
     final now = DateTime.now();
     if (_aiInsightLoading) return;
     if (_lastInsightFetch != null &&
-        now.difference(_lastInsightFetch!).inSeconds < 30) return;
+        now.difference(_lastInsightFetch!).inSeconds < 30) {
+      return;
+    }
     _lastInsightFetch = now;
     setState(() => _aiInsightLoading = true);
     final insight = await _aiService.getQuickInsight(_currentData);
@@ -183,26 +178,11 @@ class _LiveDataPageState extends State<LiveDataPage>
     }
   }
 
-  void _showConnectFirstMessage() {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Please connect to a device first',
-            textAlign: TextAlign.center,
-          ),
-          backgroundColor: Colors.grey,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  @override
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
     final isConnected = _bluetoothService.isConnected;
+    final hasSavedSnapshot = !isConnected && _currentData.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Live Data')),
@@ -216,161 +196,204 @@ class _LiveDataPageState extends State<LiveDataPage>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey[900]
-                    : Colors.white,
+                    ? Colors.grey[900]!.withValues(alpha: 0.92)
+                    : Colors.white.withValues(alpha: 0.88),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Row(
-                children: [
-                  // Animated pulse circle when live streaming, static otherwise
-                  if (isConnected && _isDataStreaming && !_isPaused)
-                    AnimatedBuilder(
-                      animation: _pulseAnimation,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scale: 0.8 + (_pulseAnimation.value * 0.4),
-                          child: Opacity(
-                            opacity: _pulseAnimation.value,
-                            child: Icon(
-                              Icons.circle,
-                              size: 12,
-                              color: AppTheme.accentOrange,
-                            ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final actionWidth = constraints.maxWidth < 380 ? 132.0 : 156.0;
+
+                  return Row(
+                    children: [
+                      // Animated pulse circle when live streaming, static otherwise
+                      if (isConnected && _isDataStreaming && !_isPaused)
+                        AnimatedBuilder(
+                          animation: _pulseAnimation,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: 0.8 + (_pulseAnimation.value * 0.4),
+                              child: Opacity(
+                                opacity: _pulseAnimation.value,
+                                child: Icon(
+                                  Icons.circle,
+                                  size: 12,
+                                  color: AppTheme.accentOrange,
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      else
+                        Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: hasSavedSnapshot
+                              ? Colors.blueGrey[400]
+                              : _isPaused
+                                  ? Colors.grey[400]
+                                  : (isConnected
+                                      ? AppTheme.accentOrange
+                                      : Colors.grey[600]),
+                        ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          hasSavedSnapshot
+                              ? 'Saved snapshot'
+                              : _isPaused
+                                  ? 'Paused'
+                                  : (isConnected ? 'Live' : 'Offline'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
                           ),
-                        );
-                      },
-                    )
-                  else
-                    Icon(
-                      Icons.circle,
-                      size: 12,
-                      color: _isPaused
-                          ? Colors.grey[400]
-                          : (isConnected
-                              ? AppTheme.accentOrange
-                              : Colors.grey[600]),
-                    ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _isPaused
-                        ? 'Paused'
-                        : (isConnected ? 'Live' : 'Offline'),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  const Spacer(),
-                  // Button area with fixed width and height, centered
-                  SizedBox(
-                    width: 220,
-                    height: 48,
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        transitionBuilder: (child, animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          );
-                        },
-                        child: !_isDataStreaming
-                            ? ElevatedButton.icon(
-                                key: const ValueKey('start'),
-                                onPressed: () {
-                                  if (isConnected) {
-                                    _startDataStream();
-                                  } else {
-                                    _showConnectFirstMessage();
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isConnected
-                                      ? AppTheme.primarySlate
-                                      : Colors.grey[400],
-                                  foregroundColor: isConnected
-                                      ? Colors.white
-                                      : Colors.grey[600],
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
-                                icon: const Icon(Icons.play_arrow, size: 20),
-                                label: const Text('Start Diagnostics'),
-                              )
-                            : _currentData.isEmpty
-                            ? SizedBox(
-                                key: const ValueKey('loading'),
-                                width: 48,
-                                height: 48,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppTheme.accentOrange,
-                                  ),
-                                ),
-                              )
-                            : Row(
-                                key: const ValueKey('controls'),
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // ECG wave — animated orange when live, static grey when paused
-                                  SizedBox(
-                                    width: 80,
-                                    height: 40,
-                                    child: ShaderMask(
-                                      shaderCallback: (bounds) =>
-                                          const LinearGradient(
-                                            colors: [
-                                              Colors.transparent,
-                                              Colors.white,
-                                              Colors.white,
-                                              Colors.transparent,
-                                            ],
-                                            stops: [0.0, 0.18, 0.82, 1.0],
-                                          ).createShader(bounds),
-                                      blendMode: BlendMode.dstIn,
-                                      child: AnimatedBuilder(
-                                        animation: _ecgController,
-                                        builder: (context, _) => CustomPaint(
-                                          painter: _EcgPainter(
-                                            _isPaused ? 0.3 : _ecgController.value,
-                                            _isPaused
-                                                ? Colors.grey.withOpacity(0.4)
-                                                : AppTheme.accentOrange.withOpacity(0.45),
-                                          ),
-                                        ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: actionWidth,
+                        height: 48,
+                        child: Center(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 400),
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              );
+                            },
+                            child: !_isDataStreaming
+                                ? ElevatedButton.icon(
+                                    key: const ValueKey('start_live'),
+                                    onPressed: isConnected ? _startDataStream : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isConnected
+                                          ? AppTheme.primarySlate
+                                          : Colors.grey[400],
+                                      foregroundColor: isConnected
+                                          ? Colors.white
+                                          : Colors.grey[600],
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
                                       ),
                                     ),
-                                  ),
-                                  // Pause/play icon
-                                  IconButton(
-                                    onPressed: _isPaused
-                                        ? _resumeDataStream
-                                        : _pauseDataStream,
-                                    icon: Icon(
-                                      _isPaused
-                                          ? Icons.play_circle_outline
-                                          : Icons.pause_circle_outline,
-                                      size: 36,
-                                      color: AppTheme.accentOrange,
+                                    icon: const Icon(Icons.wifi_tethering_rounded, size: 20),
+                                    label: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'Start Live',
+                                        maxLines: 1,
+                                        softWrap: false,
+                                        overflow: TextOverflow.fade,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  )
+                                : _currentData.isEmpty
+                                    ? Container(
+                                        key: const ValueKey('connecting'),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.92),
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: AppTheme.primarySlate.withValues(alpha: 0.10),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AnimatedBuilder(
+                                              animation: _pulseAnimation,
+                                              builder: (context, child) {
+                                                return Transform.scale(
+                                                  scale: 0.85 + (_pulseAnimation.value * 0.25),
+                                                  child: Opacity(
+                                                    opacity: _pulseAnimation.value,
+                                                    child: child,
+                                                  ),
+                                                );
+                                              },
+                                              child: Icon(
+                                                Icons.circle,
+                                                size: 10,
+                                                color: AppTheme.accentOrange,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const Text(
+                                              'Connecting live...',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Row(
+                                        key: const ValueKey('live_controls'),
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ElevatedButton.icon(
+                                            onPressed: _isPaused
+                                                ? _resumeDataStream
+                                                : _pauseDataStream,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: _isPaused
+                                                  ? AppTheme.primarySlate
+                                                  : Colors.white,
+                                              foregroundColor: _isPaused
+                                                  ? Colors.white
+                                                  : AppTheme.primarySlate,
+                                              elevation: 0,
+                                              side: BorderSide(
+                                                color: _isPaused
+                                                    ? AppTheme.primarySlate
+                                                    : AppTheme.primarySlate.withValues(alpha: 0.15),
+                                              ),
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 12,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(14),
+                                              ),
+                                            ),
+                                            icon: Icon(
+                                              _isPaused
+                                                  ? Icons.play_arrow_rounded
+                                                  : Icons.pause_rounded,
+                                              size: 18,
+                                            ),
+                                            label: Text(
+                                              _isPaused ? 'Resume' : 'Pause',
+                                              maxLines: 1,
+                                              softWrap: false,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -379,7 +402,7 @@ class _LiveDataPageState extends State<LiveDataPage>
             Expanded(
               child: _currentData.isEmpty
                   ? _buildNoDataView()
-                  : _buildDiagnosticDataView(),
+              : _buildDiagnosticDataView(hasSavedSnapshot),
             ),
           ],
         ),
@@ -389,14 +412,28 @@ class _LiveDataPageState extends State<LiveDataPage>
 
   Widget _buildNoDataView() {
     final isConnected = _bluetoothService.isConnected;
-    final isWaiting = _isDataStreaming && isConnected;
+    final isWaitingForData = isConnected && _isDataStreaming;
+
+    if (!isConnected) {
+      return Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: VehicleOfflinePrompt(
+            title: 'Vehicle is offline',
+            message: 'Turn on Bluetooth and connect your vehicle before viewing live data and diagnostics.',
+            actionLabel: 'Go to Connect',
+            onAction: widget.onNavigateToConnect,
+          ),
+        ),
+      );
+    }
 
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Rotating icon when waiting for data
-          if (isWaiting)
+          if (isWaitingForData)
             RotationTransition(
               turns: _rotationController,
               child: Icon(
@@ -407,52 +444,34 @@ class _LiveDataPageState extends State<LiveDataPage>
             )
           else
             Icon(
-              isConnected
-                  ? Icons.analytics_outlined
-                  : Icons.bluetooth_searching,
+              Icons.analytics_outlined,
               size: 64,
               color: Colors.grey[400],
             ),
           const SizedBox(height: 16),
-          // Animated dots when waiting
-          if (isWaiting)
+          if (isWaitingForData)
             _AnimatedDotsText(
               text: 'Waiting for vehicle data',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: Colors.grey[600]),
             )
           else
             Text(
-              !isConnected
-                  ? 'Connect to a device to view live data'
-                  : 'Press "Start Diagnostics" to begin',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
+              'Press Start Diagnostics to begin',
               textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
-          if (!isConnected) ...[
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: widget.onNavigateToConnect,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primarySlate,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              icon: const Icon(Icons.bluetooth_searching),
-              label: const Text('Go to Connect'),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _buildDiagnosticDataView() {
+  Widget _buildDiagnosticDataView(bool hasSavedSnapshot) {
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -463,6 +482,8 @@ class _LiveDataPageState extends State<LiveDataPage>
             aiInsight: _aiInsight,
             aiInsightLoading: _aiInsightLoading,
             onAskAI: widget.onNavigateToAI,
+            isPaused: _isPaused,
+            isSavedSnapshot: hasSavedSnapshot,
           ),
           const SizedBox(height: 16),
 
@@ -873,72 +894,8 @@ class _LiveDataPageState extends State<LiveDataPage>
     _dataTimer?.cancel();
     _pulseController.dispose();
     _rotationController.dispose();
-    _ecgController.dispose();
     super.dispose();
   }
-}
-
-// ECG waveform painter — scrolling heartbeat strip shown during live streaming
-class _EcgPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  _EcgPainter(this.progress, this.color);
-
-  // Normalised QRS+T cycle points (x in 0..60, y offset from centre — positive = up)
-  static const List<Offset> _cycle = [
-    Offset(0, 0),
-    Offset(14, 0),
-    Offset(17, -2),
-    Offset(21, 13),
-    Offset(25, -4),
-    Offset(29, 0),
-    Offset(36, 3.5),
-    Offset(44, 0),
-    Offset(60, 0),
-  ];
-
-  static const double _cycleW = 60.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.6
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final cy = size.height / 2;
-    // Scale x so two full cycles fill the canvas width
-    final scaleX = size.width / (_cycleW * 2);
-    // Scroll offset: shifts the waveform left by one cycle over the animation duration
-    final offsetX = -progress * _cycleW * scaleX;
-
-    final path = Path();
-    bool started = false;
-    // Draw enough cycles to fill canvas even while scrolling
-    for (int c = -1; c <= 3; c++) {
-      for (final pt in _cycle) {
-        final x = pt.dx * scaleX + c * _cycleW * scaleX + offsetX;
-        final y = cy - pt.dy;
-        if (!started) {
-          path.moveTo(x, y);
-          started = true;
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-    }
-
-    canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawPath(path, paint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_EcgPainter old) =>
-      old.progress != progress || old.color != color;
 }
 
 // Animated dots widget for "Waiting for vehicle data..."

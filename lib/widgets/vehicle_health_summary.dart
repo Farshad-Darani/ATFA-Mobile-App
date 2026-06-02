@@ -7,6 +7,8 @@ class VehicleHealthSummary extends StatelessWidget {
   final String? aiInsight;
   final bool aiInsightLoading;
   final VoidCallback? onAskAI;
+  final bool isPaused;
+  final bool isSavedSnapshot;
 
   const VehicleHealthSummary({
     super.key,
@@ -14,12 +16,15 @@ class VehicleHealthSummary extends StatelessWidget {
     this.aiInsight,
     this.aiInsightLoading = false,
     this.onAskAI,
+    this.isPaused = false,
+    this.isSavedSnapshot = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final analyzer = diag.DiagnosticAnalyzer();
     final healthReport = analyzer.analyzeVehicleHealth(data);
+    final isArchivedState = isPaused || isSavedSnapshot;
 
     return Card(
       elevation: 6,
@@ -53,6 +58,25 @@ class VehicleHealthSummary extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (isArchivedState)
+                  Container(
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                    ),
+                    child: Text(
+                      isSavedSnapshot ? 'SAVED' : 'PAUSED',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                  ),
                 SizedBox(
                   width: 100,
                   height: 100,
@@ -275,6 +299,9 @@ class VehicleHealthSummary extends StatelessWidget {
   }
 
   List<Color> _getHealthGradientColors(double healthScore) {
+    if (isPaused || isSavedSnapshot) {
+      return [const Color(0xFF5B6D85), const Color(0xFF7A879B)];
+    }
     if (healthScore >= 80) {
       return [AppTheme.primaryBlue, AppTheme.secondaryBlue];
     } else if (healthScore >= 60) {

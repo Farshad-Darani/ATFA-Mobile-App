@@ -34,7 +34,7 @@ class _MainNavigationState extends State<MainNavigation> {
             onNavigateToConnect: () => _navigateToTab(0),
             onNavigateToAI: () => _navigateToTab(2),
           ),
-          const DiagnosePage(),
+          DiagnosePage(onNavigateToConnect: () => _navigateToTab(0)),
           MorePage(onNavigateToTab: _navigateToTab),
         ],
       ),

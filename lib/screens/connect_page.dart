@@ -316,15 +316,15 @@ class _ConnectPageState extends State<ConnectPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: _connectedDevice != null
-                    ? AppTheme.accentOrange
+                    ? AppTheme.accentOrange.withValues(alpha: 0.94)
                     : (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[900]
-                          : Colors.white),
+                          ? Colors.grey[900]!.withValues(alpha: 0.92)
+                          : Colors.white.withValues(alpha: 0.88)),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
