@@ -165,9 +165,9 @@ class _DiagnosePageState extends State<DiagnosePage>
   final List<_QAPair> _chatHistory = [];
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  final _chatSheetScrollController = ScrollController();
   final _chatFocusNode = FocusNode();
   bool _isChatLoading = false;
-  bool _isChatExpanded = false;
   Timer? _stripTimer;
   Timer? _autoRetryTimer;
   Timer? _confirmTimer;
@@ -234,6 +234,14 @@ class _DiagnosePageState extends State<DiagnosePage>
     if (shouldShow != _showRefreshFooter && mounted) {
       setState(() => _showRefreshFooter = shouldShow);
     }
+
+    // Pull-to-refresh hint should only appear at top of list.
+    if (_scrollController.offset > 2 && _showPullRefreshIcon && mounted) {
+      setState(() {
+        _showPullRefreshIcon = false;
+        _isPullRefreshArmed = false;
+      });
+    }
   }
 
   bool get _hasVehicleConnection => _btService.isConnected;
@@ -268,7 +276,6 @@ class _DiagnosePageState extends State<DiagnosePage>
       _hasLoaded = false;
       _insights = null;
       _vehicleData = {};
-      _isChatExpanded = false;
       _loadingMessage = 'Connect to a vehicle to start diagnosis.';
       _showHeaderSyncHint = false;
     });
@@ -390,6 +397,17 @@ class _DiagnosePageState extends State<DiagnosePage>
 
   void _handlePullRefreshStatusChanged(RefreshIndicatorStatus? status) {
     if (!mounted) return;
+    final bool atTop = !_scrollController.hasClients || _scrollController.offset <= 2;
+    if (!atTop) {
+      if (_showPullRefreshIcon || _isPullRefreshArmed) {
+        setState(() {
+          _showPullRefreshIcon = false;
+          _isPullRefreshArmed = false;
+        });
+      }
+      return;
+    }
+
     final isPulling =
         status == RefreshIndicatorStatus.drag ||
         status == RefreshIndicatorStatus.armed;
@@ -455,7 +473,6 @@ class _DiagnosePageState extends State<DiagnosePage>
           _isLoading = false;
           _hasLoaded = false;
           _insights = null;
-          _isChatExpanded = false;
           _loadingMessage = 'Waiting for live vehicle data...';
         });
       }
@@ -697,7 +714,7 @@ class _DiagnosePageState extends State<DiagnosePage>
     );
   }
 
-  Future<void> _sendQuestion() async {
+  Future<void> _sendQuestionFromSheet(StateSetter sheetSetState) async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isChatLoading) return;
 
@@ -715,9 +732,9 @@ class _DiagnosePageState extends State<DiagnosePage>
 
     _inputController.clear();
     setState(() => _isChatLoading = true);
-    _scrollToBottom();
+    sheetSetState(() {});
+    _scrollChatSheetToBottom();
 
-    // Same pattern: use cached data rather than a competing BLE request
     final cached = _btService.lastData;
     final data = cached.isNotEmpty ? cached : _vehicleData;
     final answer = await _aiService.sendMessage(text, Map<String, dynamic>.from(data));
@@ -727,20 +744,171 @@ class _DiagnosePageState extends State<DiagnosePage>
         _chatHistory.add(_QAPair(question: text, answer: answer));
         _isChatLoading = false;
       });
-      _scrollToBottom();
+      sheetSetState(() {});
+      _scrollChatSheetToBottom();
     }
   }
 
-  void _scrollToBottom() {
+  void _scrollChatSheetToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 350),
+      if (_chatSheetScrollController.hasClients) {
+        _chatSheetScrollController.animateTo(
+          _chatSheetScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
+  }
+
+  void _openFollowUpSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, sheetSetState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.76,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 10, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          'FOLLOW-UP CHAT',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close_rounded),
+                          color: Colors.grey[600],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView(
+                      controller: _chatSheetScrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      children: [
+                        if (_chatHistory.isNotEmpty || _isChatLoading) ...[
+                          ..._chatHistory.map((pair) => _buildQAPair(pair)),
+                          if (_isChatLoading) _buildTypingBubble(),
+                        ] else ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.pageBackground,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.withOpacity(0.20)),
+                            ),
+                            child: Text(
+                              'Ask anything about your diagnostics and we will explain it in plain language.',
+                              style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      10,
+                      16,
+                      MediaQuery.of(context).viewInsets.bottom + 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _inputController,
+                            focusNode: _chatFocusNode,
+                            enabled: !_isChatLoading,
+                            textCapitalization: TextCapitalization.sentences,
+                            onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                            decoration: InputDecoration(
+                              hintText: 'Ask a follow-up question...',
+                              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13.5),
+                              filled: true,
+                              fillColor: AppTheme.pageBackground,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 11,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            onSubmitted: (_) => _sendQuestionFromSheet(sheetSetState),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _isChatLoading
+                              ? null
+                              : () => _sendQuestionFromSheet(sheetSetState),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _isChatLoading
+                                  ? Colors.grey[300]
+                                  : AppTheme.primarySlate,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.send_rounded,
+                              size: 18,
+                              color: _isChatLoading ? Colors.grey[500] : Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   String _formatRefreshTime() {
@@ -963,13 +1131,8 @@ class _DiagnosePageState extends State<DiagnosePage>
                   ],
                   if (canShowFollowUp) ...[
                     const SizedBox(height: 20),
-                    if (!_isChatExpanded) ...[
-                      _buildFollowUpPromptCard(),
-                      const SizedBox(height: 24),
-                    ] else ...[
-                      _buildChatSection(),
-                      const SizedBox(height: 80),
-                    ],
+                    _buildFollowUpPromptCard(),
+                    const SizedBox(height: 24),
                   ],
                     ],
                   ),
@@ -1031,7 +1194,6 @@ class _DiagnosePageState extends State<DiagnosePage>
               ],
             ),
           ),
-          if (_isChatExpanded) _buildInputBar(),
         ],
       ),
     );
@@ -1606,8 +1768,7 @@ class _DiagnosePageState extends State<DiagnosePage>
   Widget _buildFollowUpPromptCard() {
     return InkWell(
       onTap: () {
-        setState(() => _isChatExpanded = true);
-        _scrollToBottom();
+        _openFollowUpSheet();
       },
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -1658,59 +1819,6 @@ class _DiagnosePageState extends State<DiagnosePage>
           ],
         ),
       ),
-    );
-  }
-
-  // ── Follow-up chat section ───────────────────────────────────────────────────
-  Widget _buildChatSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text(
-              'FOLLOW-UP CHAT',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.9,
-                color: Colors.grey[500],
-              ),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () {
-                FocusScope.of(context).unfocus();
-                setState(() => _isChatExpanded = false);
-              },
-              icon: const Icon(Icons.keyboard_arrow_up_rounded, size: 16),
-              label: const Text('Hide'),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: Colors.grey[600],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        if (_chatHistory.isNotEmpty || _isChatLoading) ...[
-          ..._chatHistory.map((pair) => _buildQAPair(pair)),
-          if (_isChatLoading) _buildTypingBubble(),
-        ] else ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.withOpacity(0.22)),
-            ),
-            child: Text(
-              'Ask anything about your diagnostics and we will explain it in plain language.',
-              style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -1846,76 +1954,6 @@ class _DiagnosePageState extends State<DiagnosePage>
     );
   }
 
-  // ── Input bar ─────────────────────────────────────────────────────────────────
-  Widget _buildInputBar() {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        10,
-        16,
-        MediaQuery.of(context).viewInsets.bottom + 14,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _inputController,
-              focusNode: _chatFocusNode,
-              enabled: !_isChatLoading,
-              textCapitalization: TextCapitalization.sentences,
-              onTapOutside: (_) => FocusScope.of(context).unfocus(),
-              decoration: InputDecoration(
-                hintText: 'Ask a follow-up question...',
-                hintStyle:
-                    TextStyle(color: Colors.grey[400], fontSize: 13.5),
-                filled: true,
-                fillColor: AppTheme.pageBackground,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 11,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onSubmitted: (_) => _sendQuestion(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _isChatLoading ? null : _sendQuestion,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _isChatLoading
-                    ? Colors.grey[300]
-                    : AppTheme.primarySlate,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.send_rounded,
-                size: 18,
-                color: _isChatLoading ? Colors.grey[500] : Colors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _stripTimer?.cancel();
@@ -1929,6 +1967,7 @@ class _DiagnosePageState extends State<DiagnosePage>
     _chatFocusNode.dispose();
     _inputController.dispose();
     _scrollController.dispose();
+    _chatSheetScrollController.dispose();
     super.dispose();
   }
 }
