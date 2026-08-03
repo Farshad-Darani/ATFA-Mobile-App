@@ -263,7 +263,6 @@ class _LiveDataPageState extends State<LiveDataPage>
                       const SizedBox(width: 8),
                       SizedBox(
                         width: actionWidth,
-                        height: 48,
                         child: Center(
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 400),
@@ -306,7 +305,8 @@ class _LiveDataPageState extends State<LiveDataPage>
                                 : _currentData.isEmpty
                                     ? Container(
                                         key: const ValueKey('connecting'),
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                                         decoration: BoxDecoration(
                                           color: Colors.white.withValues(alpha: 0.92),
                                           borderRadius: BorderRadius.circular(14),
@@ -315,6 +315,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                           ),
                                         ),
                                         child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             AnimatedBuilder(
@@ -334,12 +335,20 @@ class _LiveDataPageState extends State<LiveDataPage>
                                                 color: AppTheme.accentOrange,
                                               ),
                                             ),
-                                            const SizedBox(width: 10),
-                                            const Text(
-                                              'Connecting live...',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
+                                            const SizedBox(width: 8),
+                                            const Flexible(
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  'Connecting...',
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow: TextOverflow.fade,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                           ],

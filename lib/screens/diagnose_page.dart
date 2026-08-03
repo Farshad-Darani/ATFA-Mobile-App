@@ -173,7 +173,6 @@ class _DiagnosePageState extends State<DiagnosePage>
   Timer? _confirmTimer;
   Timer? _phaseBannerTimer;
   int _autoRetrySecondsLeft = 0;
-  bool _showAiRetryNotice = false;
   _AnalysisPhase _analysisPhase = _AnalysisPhase.initial;
   int _successfulAnalyses = 0;
   bool _showPhaseBanner = true;
@@ -182,6 +181,8 @@ class _DiagnosePageState extends State<DiagnosePage>
   bool _showPullRefreshIcon = false;
   bool _isPullRefreshArmed = false;
   Timer? _pullRefreshHintHideTimer;
+  bool _showHeaderSyncHint = false;
+  Timer? _headerSyncHintTimer;
   Future<void>? _activeLoadFuture;
 
   // Keep short in-memory context for better follow-up analysis quality.
@@ -246,8 +247,10 @@ class _DiagnosePageState extends State<DiagnosePage>
     if (!mounted) return;
     if (_isStreamPaused) {
       _cancelAutoRetry();
+      _headerSyncHintTimer?.cancel();
       setState(() {
         _isLoading = false;
+        _showHeaderSyncHint = false;
       });
       return;
     }
@@ -266,8 +269,24 @@ class _DiagnosePageState extends State<DiagnosePage>
       _insights = null;
       _vehicleData = {};
       _isChatExpanded = false;
-      _showAiRetryNotice = false;
       _loadingMessage = 'Connect to a vehicle to start diagnosis.';
+      _showHeaderSyncHint = false;
+    });
+  }
+
+  void _triggerHeaderSyncHint() {
+    _headerSyncHintTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _showHeaderSyncHint = true;
+      });
+    } else {
+      _showHeaderSyncHint = true;
+    }
+
+    _headerSyncHintTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted || !_showHeaderSyncHint) return;
+      setState(() => _showHeaderSyncHint = false);
     });
   }
 
@@ -414,6 +433,9 @@ class _DiagnosePageState extends State<DiagnosePage>
       _isLoading = true;
       _loadingMessage = _phaseLoadingMessage();
     });
+    if (_insights != null && !_insights!.isError) {
+      _triggerHeaderSyncHint();
+    }
 
     // If connected but no data cached yet, wait up to 3×3s for first data
     if (_btService.lastData.isEmpty && _btService.isConnected && _retryCount < 3) {
@@ -434,7 +456,6 @@ class _DiagnosePageState extends State<DiagnosePage>
           _hasLoaded = false;
           _insights = null;
           _isChatExpanded = false;
-          _showAiRetryNotice = false;
           _loadingMessage = 'Waiting for live vehicle data...';
         });
       }
@@ -456,7 +477,6 @@ class _DiagnosePageState extends State<DiagnosePage>
           _insights = insights;
           _isLoading = false;
           _hasLoaded = false;
-          _showAiRetryNotice = false;
         });
         _showLimitModal(insights.isAnonymousLimit);
       }
@@ -479,18 +499,18 @@ class _DiagnosePageState extends State<DiagnosePage>
         if (existingStable) {
           // Keep currently visible diagnosis while background retry runs.
           _hasLoaded = true;
-          _showAiRetryNotice = true;
         } else if (_savedInsights != null) {
           // Fall back to the last saved successful diagnosis.
           _insights = _savedInsights;
           _hasLoaded = true;
-          _showAiRetryNotice = true;
         } else {
           _insights = insights;
           _hasLoaded = false;
-          _showAiRetryNotice = false;
         }
       });
+      if (existingStable || _savedInsights != null) {
+        _triggerHeaderSyncHint();
+      }
       _scheduleAutoRetry();
       return;
     }
@@ -499,7 +519,6 @@ class _DiagnosePageState extends State<DiagnosePage>
       _insights = insights;
       _isLoading = false;
       _hasLoaded = true;
-      _showAiRetryNotice = false;
       _lastRefresh = DateTime.now();
     });
     _rememberAnalysis(insights);
@@ -781,6 +800,7 @@ class _DiagnosePageState extends State<DiagnosePage>
     final canShowFollowUp = hasStableInsights && _hasLoaded;
     final hasSavedOfflineSummary = (vehicleUnavailable || isPausedNow) && _savedInsights != null;
     final hasSavedConnectedSummary = connectedWithoutLiveData && _savedInsights != null;
+    final showInlineReconnectState = !isPausedNow && _showHeaderSyncHint;
 
     return Scaffold(
       backgroundColor: AppTheme.pageBackground,
@@ -861,10 +881,6 @@ class _DiagnosePageState extends State<DiagnosePage>
                       _buildPausedNotice(),
                       const SizedBox(height: 12),
                     ],
-                    if (_showAiRetryNotice) ...[
-                      _buildAiRetryNotice(),
-                      const SizedBox(height: 12),
-                    ],
                     _buildAnimatedInsightSlot(
                       slotId: 'status',
                       isLoading: showLoadingCards,
@@ -887,6 +903,7 @@ class _DiagnosePageState extends State<DiagnosePage>
                         badgeText: _insights!.urgency.toUpperCase(),
                         badgeColor: _urgencyColor(_insights!.urgency),
                         muted: isPausedNow,
+                        animateHeaderSync: showInlineReconnectState,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -907,6 +924,7 @@ class _DiagnosePageState extends State<DiagnosePage>
                         body: _insights!.risk,
                         accentColor: _riskAccentColor(_insights!.risk),
                         muted: isPausedNow,
+                        animateHeaderSync: showInlineReconnectState,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -927,12 +945,16 @@ class _DiagnosePageState extends State<DiagnosePage>
                         body: _insights!.action,
                         accentColor: AppTheme.successGreen,
                         muted: isPausedNow,
+                        animateHeaderSync: showInlineReconnectState,
                       ),
                     ),
                     if ((_insights?.mechanicNote ?? '').isNotEmpty ||
                         (_insights?.progressComparedToLast ?? '').isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      _buildMechanicNoteCard(_insights!, muted: isPausedNow),
+                      _buildMechanicNoteCard(
+                        _insights!,
+                        muted: isPausedNow,
+                      ),
                     ],
                     if (_showRefreshFooter) ...[
                       const SizedBox(height: 4),
@@ -1338,41 +1360,6 @@ class _DiagnosePageState extends State<DiagnosePage>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildAiRetryNotice() {
-    final String subtitle;
-    if (_isLoading) {
-      subtitle = 'Showing last known analysis while reconnecting to AI...';
-    } else if (_autoRetrySecondsLeft > 0) {
-      subtitle = 'Showing last known analysis. Retrying in $_autoRetrySecondsLeft s.';
-    } else {
-      subtitle = 'Showing last known analysis while retrying AI connection.';
-    }
-
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(maxWidth: 420),
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.primarySlate.withOpacity(0.12)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.wifi_tethering_error_rounded, size: 16, color: Colors.grey[700]),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              subtitle,
-              style: TextStyle(fontSize: 12.3, color: Colors.grey[700], height: 1.35),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1936,6 +1923,7 @@ class _DiagnosePageState extends State<DiagnosePage>
     _confirmTimer?.cancel();
     _phaseBannerTimer?.cancel();
     _pullRefreshHintHideTimer?.cancel();
+    _headerSyncHintTimer?.cancel();
     _scrollController.removeListener(_syncRefreshFooterVisibility);
     _btService.isPaused.removeListener(_handlePauseStateChanged);
     _chatFocusNode.dispose();
@@ -1954,6 +1942,7 @@ class _InsightCard extends StatelessWidget {
   final String? badgeText;
   final Color? badgeColor;
   final bool muted;
+  final bool animateHeaderSync;
 
   const _InsightCard({
     required this.icon,
@@ -1963,6 +1952,7 @@ class _InsightCard extends StatelessWidget {
     this.badgeText,
     this.badgeColor,
     this.muted = false,
+    this.animateHeaderSync = false,
   });
 
   @override
@@ -2023,14 +2013,10 @@ class _InsightCard extends StatelessWidget {
                   child: Icon(icon, size: 16, color: iconColor),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.9,
-                    color: secondaryTextColor,
-                  ),
+                _AnimatedHeaderLabel(
+                  label: label,
+                  color: secondaryTextColor,
+                  animate: animateHeaderSync,
                 ),
                 if (badgeText != null) ...[
                   const Spacer(),
@@ -2068,6 +2054,119 @@ class _InsightCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedHeaderLabel extends StatefulWidget {
+  final String label;
+  final Color color;
+  final bool animate;
+
+  const _AnimatedHeaderLabel({
+    required this.label,
+    required this.color,
+    required this.animate,
+  });
+
+  @override
+  State<_AnimatedHeaderLabel> createState() => _AnimatedHeaderLabelState();
+}
+
+class _AnimatedHeaderLabelState extends State<_AnimatedHeaderLabel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 1100),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.9,
+      color: widget.color,
+    );
+
+    if (!widget.animate) {
+      return Text(widget.label, style: baseStyle);
+    }
+
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_ctrl.value);
+        final dx = math.sin(t * math.pi * 2) * 0.9;
+        final alpha = (0.72 + (t * 0.28)).clamp(0.0, 1.0);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Transform.translate(
+              offset: Offset(dx, 0),
+              child: Text(
+                widget.label,
+                style: baseStyle.copyWith(
+                  color: widget.color.withValues(alpha: alpha),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            _HeaderTrailingDots(
+              progress: _ctrl.value,
+              color: widget.color,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HeaderTrailingDots extends StatelessWidget {
+  final double progress;
+  final Color color;
+
+  const _HeaderTrailingDots({
+    required this.progress,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        final phase = (progress + i / 3) % 1.0;
+        final opacity =
+            (phase < 0.5 ? phase * 2 : (1 - phase) * 2).clamp(0.25, 1.0);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1.2),
+          child: Opacity(
+            opacity: opacity,
+            child: Container(
+              width: 3.6,
+              height: 3.6,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.95),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 }
@@ -2120,7 +2219,7 @@ class _LoadingInsightCardState extends State<_LoadingInsightCard>
         final wave = (math.sin(t * math.pi * 2) + 1) / 2;
         final shadowBoost = 0.16 + (wave * 0.14);
         final iconLift = -1.5 + (wave * 3);
-        final iconTilt = (-0.05 + (wave * 0.10));
+        final iconTilt = -0.05 + (wave * 0.10);
         final pulseAlpha = 0.10 + (wave * 0.12);
 
         final Color bgStart = Color.lerp(AppTheme.primarySlate, widget.accentColor, 0.14)!;
