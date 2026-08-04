@@ -214,8 +214,8 @@ class _SettingsPageState extends State<SettingsPage> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white.withOpacity(0.1)
-                  : AppTheme.primarySlate.withOpacity(0.1),
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : AppTheme.primarySlate.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -250,7 +250,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: const Color(0xFF2196F3),
+            activeThumbColor: const Color(0xFF2196F3),
           ),
         ],
       ),

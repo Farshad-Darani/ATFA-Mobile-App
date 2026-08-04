@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,7 +31,21 @@ class SupabaseService {
   /// creates an anonymous session so usage can be tracked immediately.
   static Future<void> ensureSession() async {
     if (client.auth.currentSession == null) {
-      await client.auth.signInAnonymously();
+      try {
+        await client.auth
+            .signInAnonymously()
+            .timeout(const Duration(seconds: 10));
+      } on TimeoutException {
+        debugPrint('Supabase anonymous sign-in timed out. Continuing offline.');
+      } on AuthException catch (e) {
+        debugPrint(
+          'Supabase anonymous sign-in failed: ${e.message}. Continuing offline.',
+        );
+      } catch (e) {
+        debugPrint(
+          'Supabase anonymous sign-in failed with unexpected error: $e. Continuing offline.',
+        );
+      }
     }
   }
 

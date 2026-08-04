@@ -52,7 +52,7 @@ class _LimitReachedSheet extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.accentOrange.withOpacity(0.1),
+              color: AppTheme.accentOrange.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -217,6 +217,12 @@ class _DiagnosePageState extends State<DiagnosePage>
         }
         _recordSample();
         setState(() {});
+        // Trigger first load automatically once live data arrives.
+        if (!_hasLoaded && !_isLoading && _activeLoadFuture == null &&
+            _hasLiveVehicleSnapshot) {
+          _loadInsights();
+          return;
+        }
         // Auto-refresh every 90s silently while monitoring.
         if (_hasLoaded && !_isLoading && _lastRefresh != null &&
             !_isStreamPaused &&
@@ -393,6 +399,26 @@ class _DiagnosePageState extends State<DiagnosePage>
         setState(() => _isPullRefreshing = false);
       }
     }
+  }
+
+  Future<void> _runDiagnosisNow() async {
+    if (!_hasVehicleConnection || _isLoading) return;
+
+    if (_isStreamPaused) {
+      _btService.setPaused(false);
+    }
+
+    if (mounted) {
+      setState(() => _loadingMessage = 'Collecting live samples...');
+    }
+
+    try {
+      await _btService.getRealTimeData();
+    } catch (_) {
+      // _loadInsights handles retries and fallback states.
+    }
+
+    await _loadInsights(force: true);
   }
 
   void _handlePullRefreshStatusChanged(RefreshIndicatorStatus? status) {
@@ -824,7 +850,7 @@ class _DiagnosePageState extends State<DiagnosePage>
                             decoration: BoxDecoration(
                               color: AppTheme.pageBackground,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.grey.withOpacity(0.20)),
+                              border: Border.all(color: Colors.grey.withValues(alpha: 0.20)),
                             ),
                             child: Text(
                               'Ask anything about your diagnostics and we will explain it in plain language.',
@@ -840,13 +866,17 @@ class _DiagnosePageState extends State<DiagnosePage>
                       16,
                       10,
                       16,
-                      MediaQuery.of(context).viewInsets.bottom + 12,
+                      math.max(
+                            MediaQuery.of(context).viewInsets.bottom,
+                            MediaQuery.of(context).viewPadding.bottom,
+                          ) +
+                          14,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, -2),
                         ),
@@ -961,7 +991,8 @@ class _DiagnosePageState extends State<DiagnosePage>
     super.build(context);
     final isPausedNow = _isStreamPaused;
     final hasStableInsights = _insights != null && !_insights!.isError;
-    final showLoadingCards = _isLoading && (!hasStableInsights || _isPullRefreshing);
+    final showLoadingCards = (_isLoading || (!_hasLoaded && _hasLiveVehicleSnapshot && !isPausedNow))
+        && (!hasStableInsights || _isPullRefreshing);
     final vehicleUnavailable = !_hasVehicleConnection;
     final connectedWithoutLiveData =
       _hasVehicleConnection && !_hasLiveVehicleSnapshot && !isPausedNow;
@@ -980,7 +1011,7 @@ class _DiagnosePageState extends State<DiagnosePage>
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.accentOrange.withOpacity(0.18),
+                color: AppTheme.accentOrange.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -1033,13 +1064,10 @@ class _DiagnosePageState extends State<DiagnosePage>
                   if (!showLoadingCards && !hasStableInsights) ...[
                     if (hasSavedOfflineSummary)
                       _buildSavedSummaryState()
-                    else if (hasSavedConnectedSummary) ...[
-                      _buildConnectedNoDataNotice(),
-                      const SizedBox(height: 12),
-                      _buildSavedSummaryState(),
-                    ]
+                    else if (hasSavedConnectedSummary)
+                      _buildSavedSummaryState()
                     else if (connectedWithoutLiveData)
-                      _buildConnectedNoDataNotice()
+                      const SizedBox.shrink()
                     else if (vehicleUnavailable)
                       _buildConnectionRequiredState()
                     else
@@ -1202,7 +1230,9 @@ class _DiagnosePageState extends State<DiagnosePage>
   // ── Vehicle status card (mirrors connect page color pattern) ─────────────────
   Widget _buildVehicleCard(bool paused) {
     final connected = _btService.isConnected;
+    final hasLiveSnapshot = _hasLiveVehicleSnapshot;
     final streaming = connected && !paused;
+    final readyToRun = connected && !paused && !_hasLiveVehicleSnapshot;
     final rpm = _vehicleData['rpm'];
     final temp = _vehicleData['coolantTemp'];
     final battery = _vehicleData['batteryVoltage'];
@@ -1216,8 +1246,8 @@ class _DiagnosePageState extends State<DiagnosePage>
     if (streaming) {
       cardColor = AppTheme.accentOrange;
       labelColor = Colors.white;
-      chipColor = Colors.white.withOpacity(0.85);
-      statusLabel = 'LIVE DATA';
+      chipColor = Colors.white.withValues(alpha: 0.85);
+      statusLabel = hasLiveSnapshot ? 'LIVE DATA' : 'CONNECTED';
     } else if (connected && paused) {
       cardColor = Colors.white;
       labelColor = Colors.grey.shade400;
@@ -1237,8 +1267,8 @@ class _DiagnosePageState extends State<DiagnosePage>
         boxShadow: [
           BoxShadow(
             color: streaming
-                ? AppTheme.accentOrange.withOpacity(0.2)
-                : Colors.black.withOpacity(0.05),
+                ? AppTheme.accentOrange.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -1261,19 +1291,49 @@ class _DiagnosePageState extends State<DiagnosePage>
           // Live readings
           if (streaming && rpm != null) ...[
             const Spacer(),
-            _readingChip(Icons.speed, '${rpm} rpm', color: chipColor),
+            _readingChip(Icons.speed, '$rpm rpm', color: chipColor),
             const SizedBox(width: 8),
-            if (temp != null) _readingChip(Icons.thermostat_outlined, '${temp}°C', color: chipColor),
+            if (temp != null) _readingChip(Icons.thermostat_outlined, '$temp°C', color: chipColor),
             if (battery != null) ...[
               const SizedBox(width: 8),
               _readingChip(Icons.battery_5_bar_outlined, '${battery}V', color: chipColor),
             ],
+          ] else if (!connected) ...[
+            const Spacer(),
+            TextButton.icon(
+              onPressed: widget.onNavigateToConnect,
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey.shade700,
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.bluetooth_searching_rounded, size: 15),
+              label: const Text(
+                'Connect',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ] else if (readyToRun) ...[
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _isLoading ? null : _runDiagnosisNow,
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.play_circle_outline_rounded, size: 16),
+              label: Text(
+                _isLoading ? 'Running...' : 'Run',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+            ),
           ] else if (connected && paused && rpm != null) ...[
             // Greyed-out last known values
             const Spacer(),
             Opacity(
               opacity: 0.4,
-              child: _readingChip(Icons.speed, '${rpm} rpm'),
+              child: _readingChip(Icons.speed, '$rpm rpm'),
             ),
           ],
         ],
@@ -1381,7 +1441,7 @@ class _DiagnosePageState extends State<DiagnosePage>
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accent.withOpacity(0.18)),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
       ),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Row(
@@ -1389,7 +1449,7 @@ class _DiagnosePageState extends State<DiagnosePage>
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
+              color: accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, size: 16, color: accent),
@@ -1488,44 +1548,6 @@ class _DiagnosePageState extends State<DiagnosePage>
     );
   }
 
-  Widget _buildConnectedNoDataNotice() {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 420),
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.primarySlate.withOpacity(0.12)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.info_outline_rounded, size: 16, color: Colors.grey[700]),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Connected. Start diagnostics in Live Data to collect fresh samples, then pull to refresh analysis here.',
-                style: TextStyle(fontSize: 12.3, color: Colors.grey[700], height: 1.35),
-              ),
-            ),
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: () => _loadInsights(force: true),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: AppTheme.primarySlate,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildPausedNotice() {
     final String subtitle = _lastRefresh == null
         ? 'Live data paused. Showing the last known diagnosis.'
@@ -1539,7 +1561,7 @@ class _DiagnosePageState extends State<DiagnosePage>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.primarySlate.withOpacity(0.12)),
+        border: Border.all(color: AppTheme.primarySlate.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
@@ -1572,7 +1594,7 @@ class _DiagnosePageState extends State<DiagnosePage>
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.primarySlate.withOpacity(0.08)),
+                border: Border.all(color: AppTheme.primarySlate.withValues(alpha: 0.08)),
               ),
               child: Row(
                 children: [
@@ -1580,13 +1602,13 @@ class _DiagnosePageState extends State<DiagnosePage>
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppTheme.primarySlate.withOpacity(0.06),
+                      color: AppTheme.primarySlate.withValues(alpha: 0.06),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.history_rounded,
                       size: 22,
-                      color: AppTheme.primarySlate.withOpacity(0.72),
+                      color: AppTheme.primarySlate.withValues(alpha: 0.72),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1649,30 +1671,6 @@ class _DiagnosePageState extends State<DiagnosePage>
               const SizedBox(height: 12),
               _buildMechanicNoteCard(summary, isSaved: true, muted: true),
             ],
-            const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: widget.onNavigateToConnect,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primarySlate,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(Icons.bluetooth_searching_rounded, size: 20),
-                  label: const Text(
-                    'Go to Connect',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -1699,8 +1697,8 @@ class _DiagnosePageState extends State<DiagnosePage>
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: muted
-              ? Colors.grey.withOpacity(0.28)
-              : AppTheme.primarySlate.withOpacity(0.09),
+              ? Colors.grey.withValues(alpha: 0.28)
+              : AppTheme.primarySlate.withValues(alpha: 0.09),
         ),
       ),
       child: Row(
@@ -1710,16 +1708,16 @@ class _DiagnosePageState extends State<DiagnosePage>
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: muted
-                  ? Colors.blueGrey.withOpacity(0.12)
-                  : AppTheme.primarySlate.withOpacity(0.07),
+                  ? Colors.blueGrey.withValues(alpha: 0.12)
+                  : AppTheme.primarySlate.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(
               Icons.handyman_outlined,
               size: 16,
               color: muted
-                  ? Colors.blueGrey.withOpacity(0.85)
-                  : AppTheme.primarySlate.withOpacity(0.78),
+                  ? Colors.blueGrey.withValues(alpha: 0.85)
+                  : AppTheme.primarySlate.withValues(alpha: 0.78),
             ),
           ),
           const SizedBox(width: 10),
@@ -1778,13 +1776,13 @@ class _DiagnosePageState extends State<DiagnosePage>
             end: Alignment.bottomRight,
             colors: [
               AppTheme.primarySlate,
-              AppTheme.primarySlate.withOpacity(0.88),
+              AppTheme.primarySlate.withValues(alpha: 0.88),
             ],
           ),
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primarySlate.withOpacity(0.28),
+              color: AppTheme.primarySlate.withValues(alpha: 0.28),
               blurRadius: 14,
               offset: const Offset(0, 5),
             ),
@@ -1796,7 +1794,7 @@ class _DiagnosePageState extends State<DiagnosePage>
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.16),
+                color: Colors.white.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -1890,7 +1888,7 @@ class _DiagnosePageState extends State<DiagnosePage>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -1942,7 +1940,7 @@ class _DiagnosePageState extends State<DiagnosePage>
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -2005,14 +2003,14 @@ class _InsightCard extends StatelessWidget {
     final Color textColor = muted ? const Color(0xFF334155) : Colors.white;
     final Color secondaryTextColor = muted
       ? const Color(0xFF475569)
-      : Colors.white.withOpacity(0.78);
+      : Colors.white.withValues(alpha: 0.78);
     final Color iconChipColor = muted
-      ? Colors.white.withOpacity(0.55)
-      : Colors.white.withOpacity(0.14);
+      ? Colors.white.withValues(alpha: 0.55)
+      : Colors.white.withValues(alpha: 0.14);
     final Color iconColor = muted ? const Color(0xFF475569) : Colors.white;
     final Color resolvedBadgeColor = muted
-      ? Colors.blueGrey.withOpacity(0.2)
-      : (badgeColor ?? Colors.white.withOpacity(0.15));
+      ? Colors.blueGrey.withValues(alpha: 0.2)
+      : (badgeColor ?? Colors.white.withValues(alpha: 0.15));
 
     return Container(
       decoration: BoxDecoration(
@@ -2023,14 +2021,14 @@ class _InsightCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: muted ? Colors.grey.withOpacity(0.24) : Colors.white.withOpacity(0.10),
+          color: muted ? Colors.grey.withValues(alpha: 0.24) : Colors.white.withValues(alpha: 0.10),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: muted
-                ? Colors.blueGrey.withOpacity(0.12)
-                : accentColor.withOpacity(0.24),
+                ? Colors.blueGrey.withValues(alpha: 0.12)
+                : accentColor.withValues(alpha: 0.24),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
@@ -2086,7 +2084,7 @@ class _InsightCard extends StatelessWidget {
               body.isEmpty ? '—' : body,
               style: TextStyle(
                 fontSize: 13.5,
-                color: muted ? textColor : Colors.white.withOpacity(0.94),
+                color: muted ? textColor : Colors.white.withValues(alpha: 0.94),
                 height: 1.62,
               ),
             ),

@@ -6,7 +6,6 @@ import '../services/ai_service.dart';
 import '../widgets/diagnostic_data_card.dart';
 import '../widgets/gauge_widget.dart';
 import '../widgets/vehicle_health_summary.dart';
-import '../widgets/vehicle_offline_prompt.dart';
 import '../config/app_theme.dart';
 
 class LiveDataPage extends StatefulWidget {
@@ -275,27 +274,32 @@ class _LiveDataPageState extends State<LiveDataPage>
                             child: !_isDataStreaming
                                 ? ElevatedButton.icon(
                                     key: const ValueKey('start_live'),
-                                    onPressed: isConnected ? _startDataStream : null,
+                                    onPressed: isConnected
+                                        ? _startDataStream
+                                        : widget.onNavigateToConnect,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: isConnected
                                           ? AppTheme.primarySlate
-                                          : Colors.grey[400],
-                                      foregroundColor: isConnected
-                                          ? Colors.white
-                                          : Colors.grey[600],
+                                          : AppTheme.primarySlate,
+                                      foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 14,
                                         vertical: 12,
                                       ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                    icon: const Icon(Icons.wifi_tethering_rounded, size: 20),
-                                    label: const FittedBox(
+                                    icon: Icon(
+                                      isConnected
+                                          ? Icons.wifi_tethering_rounded
+                                          : Icons.bluetooth_searching_rounded,
+                                      size: 20,
+                                    ),
+                                    label: FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Text(
-                                        'Start Live',
+                                        isConnected ? 'Start Live' : 'Connect',
                                         maxLines: 1,
                                         softWrap: false,
                                         overflow: TextOverflow.fade,
@@ -309,7 +313,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                                         decoration: BoxDecoration(
                                           color: Colors.white.withValues(alpha: 0.92),
-                                          borderRadius: BorderRadius.circular(14),
+                                          borderRadius: BorderRadius.circular(10),
                                           border: Border.all(
                                             color: AppTheme.primarySlate.withValues(alpha: 0.10),
                                           ),
@@ -380,7 +384,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                                                 vertical: 12,
                                               ),
                                               shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(14),
+                                                borderRadius: BorderRadius.circular(10),
                                               ),
                                             ),
                                             icon: Icon(
@@ -422,21 +426,6 @@ class _LiveDataPageState extends State<LiveDataPage>
   Widget _buildNoDataView() {
     final isConnected = _bluetoothService.isConnected;
     final isWaitingForData = isConnected && _isDataStreaming;
-
-    if (!isConnected) {
-      return Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: VehicleOfflinePrompt(
-            title: 'Vehicle is offline',
-            message: 'Turn on Bluetooth and connect your vehicle before viewing live data and diagnostics.',
-            actionLabel: 'Go to Connect',
-            onAction: widget.onNavigateToConnect,
-          ),
-        ),
-      );
-    }
 
     return Center(
       child: Column(

@@ -135,8 +135,8 @@ class _MorePageState extends State<MorePage> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withOpacity(0.1)
-                      : AppTheme.primarySlate.withOpacity(0.1),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : AppTheme.primarySlate.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -246,7 +246,7 @@ class _AccountSectionState extends State<_AccountSection> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentOrange.withOpacity(0.12),
+                      color: AppTheme.accentOrange.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.person_outline, color: AppTheme.accentOrange, size: 24),
@@ -315,8 +315,8 @@ class _AccountSectionState extends State<_AccountSection> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: _isPro
-                        ? AppTheme.accentOrange.withOpacity(0.12)
-                        : AppTheme.primarySlate.withOpacity(0.1),
+                        ? AppTheme.accentOrange.withValues(alpha: 0.12)
+                        : AppTheme.primarySlate.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(

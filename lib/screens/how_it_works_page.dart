@@ -264,8 +264,8 @@ class HowItWorksPage extends StatelessWidget {
             // Need More Help Card
             Card(
               color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white.withOpacity(0.05)
-                  : AppTheme.primarySlate.withOpacity(0.1),
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : AppTheme.primarySlate.withValues(alpha: 0.1),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -404,7 +404,7 @@ class HowItWorksPage extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 64,
-                  color: AppTheme.primarySlate.withOpacity(0.3),
+                  color: AppTheme.primarySlate.withValues(alpha: 0.3),
                 ),
               ),
             ],
@@ -425,8 +425,8 @@ class HowItWorksPage extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withOpacity(0.1)
-                : AppTheme.primarySlate.withOpacity(0.1),
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.primarySlate.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(

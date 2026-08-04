@@ -125,7 +125,7 @@ class _SignInPageState extends State<SignInPage> {
           'Intelligent Auto Diagnostics',
           style: TextStyle(
             fontSize: 14,
-            color: AppTheme.primarySlate.withOpacity(0.6),
+            color: AppTheme.primarySlate.withValues(alpha: 0.6),
             letterSpacing: 0.5,
           ),
         ),
@@ -140,7 +140,7 @@ class _SignInPageState extends State<SignInPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -205,9 +205,9 @@ class _SignInPageState extends State<SignInPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: AppTheme.errorRed.withOpacity(0.08),
+                color: AppTheme.errorRed.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.errorRed.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -278,7 +278,7 @@ class _SignInPageState extends State<SignInPage> {
         Text(
           "Don't have an account? ",
           style: TextStyle(
-            color: AppTheme.primarySlate.withOpacity(0.6),
+            color: AppTheme.primarySlate.withValues(alpha: 0.6),
             fontSize: 14,
           ),
         ),

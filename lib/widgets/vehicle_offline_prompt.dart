@@ -26,10 +26,10 @@ class VehicleOfflinePrompt extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppTheme.primarySlate.withOpacity(0.09)),
+          border: Border.all(color: AppTheme.primarySlate.withValues(alpha: 0.09)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.07),
+              color: Colors.black.withValues(alpha: 0.07),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -42,13 +42,13 @@ class VehicleOfflinePrompt extends StatelessWidget {
               width: 58,
               height: 58,
               decoration: BoxDecoration(
-                color: AppTheme.primarySlate.withOpacity(0.06),
+                color: AppTheme.primarySlate.withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.bluetooth_disabled_rounded,
                 size: 30,
-                color: AppTheme.primarySlate.withOpacity(0.72),
+                color: AppTheme.primarySlate.withValues(alpha: 0.72),
               ),
             ),
             const SizedBox(height: 14),

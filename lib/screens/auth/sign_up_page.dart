@@ -108,7 +108,7 @@ class _SignUpPageState extends State<SignUpPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -196,10 +196,10 @@ class _SignUpPageState extends State<SignUpPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: AppTheme.errorRed.withOpacity(0.08),
+                color: AppTheme.errorRed.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
                 border:
-                    Border.all(color: AppTheme.errorRed.withOpacity(0.3)),
+                    Border.all(color: AppTheme.errorRed.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -253,9 +253,9 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.accentOrange.withOpacity(0.08),
+        color: AppTheme.accentOrange.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.accentOrange.withOpacity(0.25)),
+        border: Border.all(color: AppTheme.accentOrange.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,7 +279,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 Text(
                   '5 free AI analyses · Full live data · BLE diagnostics\nUpgrade to Pro for unlimited AI — \$6.99/month',
                   style: TextStyle(
-                    color: AppTheme.primarySlate.withOpacity(0.7),
+                    color: AppTheme.primarySlate.withValues(alpha: 0.7),
                     fontSize: 12,
                     height: 1.5,
                   ),
@@ -301,7 +301,7 @@ class _SignUpPageState extends State<SignUpPage> {
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: AppTheme.successGreen.withOpacity(0.12),
+            color: AppTheme.successGreen.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.mark_email_read_outlined,
@@ -321,7 +321,7 @@ class _SignUpPageState extends State<SignUpPage> {
           'We sent a confirmation link to\n${_emailController.text.trim()}\n\nClick the link to activate your account, then sign in.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: AppTheme.primarySlate.withOpacity(0.65),
+            color: AppTheme.primarySlate.withValues(alpha: 0.65),
             fontSize: 14,
             height: 1.6,
           ),

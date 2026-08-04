@@ -112,7 +112,7 @@ class LegalPage extends StatelessWidget {
 
             // Copyright Notice
             Card(
-              color: const Color(0xFF2196F3).withOpacity(0.05),
+              color: const Color(0xFF2196F3).withValues(alpha: 0.05),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -198,8 +198,8 @@ class LegalPage extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withOpacity(0.1)
-                      : AppTheme.primarySlate.withOpacity(0.1),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : AppTheme.primarySlate.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

@@ -126,8 +126,8 @@ class ContactSupportPage extends StatelessWidget {
                           decoration: BoxDecoration(
                             color:
                                 Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white.withOpacity(0.1)
-                                : AppTheme.primarySlate.withOpacity(0.1),
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : AppTheme.primarySlate.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
@@ -274,7 +274,7 @@ class ContactSupportPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.accentOrange.withOpacity(0.1),
+                  color: AppTheme.accentOrange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: AppTheme.accentOrange, size: 28),
