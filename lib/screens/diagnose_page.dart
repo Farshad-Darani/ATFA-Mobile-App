@@ -73,8 +73,8 @@ class _LimitReachedSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             isAnonymous
-                ? 'You\'ve used your 2 free AI analyses.\nCreate a free account to get 4 every month — no credit card needed.'
-                : 'You\'ve used all 4 analyses this month.\nUpgrade to Pro for unlimited access every month.',
+                ? 'You\'ve used your 2 free AI analyses.\nCreate a free account to get 2 every week — no credit card needed.'
+                : 'You\'ve used your 2 analyses this week.\nUpgrade to Pro for unlimited access every week.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 15, color: Colors.grey[600], height: 1.5),
           ),
@@ -161,6 +161,15 @@ class _DiagnosePageState extends State<DiagnosePage>
   Map<String, dynamic> _vehicleData = {};
   int _retryCount = 0;
   String _loadingMessage = 'Analyzing your vehicle...';
+
+  // Session tracking: the timestamp of the last credited analysis.
+  // Within 60 min of this, refreshes are free (same session).
+  DateTime? _lastCountedAnalysisAt;
+  static const _sessionCooldownMinutes = 60;
+
+  // Credit display (populated from server response).
+  int? _creditsRemaining;
+  String? _resetsOn;
 
   final List<_QAPair> _chatHistory = [];
   final _inputController = TextEditingController();
@@ -511,7 +520,13 @@ class _DiagnosePageState extends State<DiagnosePage>
     if (mounted) setState(() => _loadingMessage = _phaseLoadingMessage());
 
     final analysisPayload = _buildAnalysisPayload();
-    final insights = await _aiService.getDashboardInsights(analysisPayload);
+    final bool isNewSession = _lastCountedAnalysisAt == null ||
+        DateTime.now().difference(_lastCountedAnalysisAt!).inMinutes >=
+            _sessionCooldownMinutes;
+    final insights = await _aiService.getDashboardInsights(
+      analysisPayload,
+      countAsAnalysis: isNewSession,
+    );
 
     // Limit reached — don't retry, show the appropriate modal instead
     if (insights.isLimitReached) {
@@ -563,6 +578,11 @@ class _DiagnosePageState extends State<DiagnosePage>
       _isLoading = false;
       _hasLoaded = true;
       _lastRefresh = DateTime.now();
+      if (isNewSession) _lastCountedAnalysisAt = DateTime.now();
+      if (insights.creditsRemaining != null) {
+        _creditsRemaining = insights.creditsRemaining;
+        _resetsOn = insights.resetsOn;
+      }
     });
     _rememberAnalysis(insights);
     _advanceAnalysisPhaseAfterSuccess();
@@ -1035,6 +1055,7 @@ class _DiagnosePageState extends State<DiagnosePage>
               builder: (context, paused, _) => _buildVehicleCard(paused),
             ),
           ),
+          _buildCreditLabel(),
           Expanded(
             child: Stack(
               children: [
@@ -1390,9 +1411,31 @@ class _DiagnosePageState extends State<DiagnosePage>
     );
   }
 
+  // ── Weekly credit indicator shown below the vehicle status card ──────────────
+  Widget _buildCreditLabel() {
+    // Only show for free accounts that have received credit info from the server.
+    if (_creditsRemaining == null) return const SizedBox.shrink();
+    final remaining = _creditsRemaining!;
+    final Color color = remaining == 0
+        ? AppTheme.errorRed
+        : remaining == 1
+            ? const Color(0xFFF59E0B)
+            : Colors.grey.shade500;
+    final String label = remaining == 0
+        ? (_resetsOn != null ? 'No analyses left · resets $_resetsOn' : 'No analyses left this week')
+        : '$remaining ${remaining == 1 ? 'analysis' : 'analyses'} left this week';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 11.5, color: color),
+      ),
+    );
+  }
+
   // ── Subtle "updated X ago · Refresh" footer ──────────────────────────────────
   Widget _buildRefreshFooter({bool isRefreshing = false}) {
-    if (_lastRefresh == null) return const SizedBox.shrink();
     if (!_showRefreshFooter || isRefreshing) return const SizedBox.shrink();
     return Align(
       alignment: Alignment.center,

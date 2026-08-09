@@ -264,7 +264,7 @@ class _AccountSectionState extends State<_AccountSection> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Create a free account to unlock 4 AI analyses every month, saved history, and more.',
+                'Create a free account to unlock 2 AI analyses every week, saved history, and more.',
                 style: TextStyle(fontSize: 14, height: 1.5),
               ),
               const SizedBox(height: 16),
