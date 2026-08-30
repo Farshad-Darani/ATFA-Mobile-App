@@ -72,55 +72,6 @@ class AuthService {
     }
   }
 
-  // ── Usage Checking ──────────────────────────────────────────────────────────
-  /// Returns true if the user can still run an AI analysis (free tier: 5 total,
-  /// or they are on a Pro plan).
-  Future<bool> canRunAnalysis() async {
-    final user = currentUser;
-    if (user == null) return false;
-    try {
-      final row = await SupabaseService.client
-          .from('user_plans')
-          .select('is_pro, ai_analyses_used')
-          .eq('id', user.id)
-          .single();
-      if (row['is_pro'] == true) return true;
-      return (row['ai_analyses_used'] as int) < 4;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Returns how many free analyses the user has left (0 if pro or unknown).
-  Future<int> freeAnalysesRemaining() async {
-    final user = currentUser;
-    if (user == null) return 0;
-    try {
-      final row = await SupabaseService.client
-          .from('user_plans')
-          .select('is_pro, ai_analyses_used')
-          .eq('id', user.id)
-          .single();
-      if (row['is_pro'] == true) return 999;
-      final used = row['ai_analyses_used'] as int;
-      return (4 - used).clamp(0, 4);
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  /// Increments the analysis counter after a successful AI call.
-  Future<void> recordAnalysis() async {
-    final user = currentUser;
-    if (user == null) return;
-    try {
-      await SupabaseService.client.rpc('increment_analysis_count',
-          params: {'user_id': user.id});
-    } catch (_) {
-      // Non-critical — silently fail
-    }
-  }
-
   // ── Helpers ─────────────────────────────────────────────────────────────────
   String _friendlyAuthError(String raw) {
     final msg = raw.toLowerCase();

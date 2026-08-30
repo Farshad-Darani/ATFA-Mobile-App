@@ -39,7 +39,6 @@ class ATFAApp extends StatefulWidget {
 
 class _ATFAAppState extends State<ATFAApp> {
   ThemeMode _themeMode = ThemeMode.system;
-
   @override
   void initState() {
     super.initState();

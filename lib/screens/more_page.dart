@@ -186,7 +186,7 @@ class _AccountSection extends StatefulWidget {
 
 class _AccountSectionState extends State<_AccountSection> {
   int _analysesUsed = 0;
-  DateTime? _resetDate;
+  DateTime? _trialEndsAt;
   bool _isPro = false;
   bool _loadingUsage = false;
 
@@ -203,15 +203,15 @@ class _AccountSectionState extends State<_AccountSection> {
     try {
       final row = await SupabaseService.client
           .from('user_plans')
-          .select('is_pro, ai_analyses_used, reset_date')
+          .select('is_pro, ai_analyses_used, trial_ends_at')
           .eq('id', user.id)
           .single();
       if (mounted) {
         setState(() {
           _isPro = row['is_pro'] == true;
           _analysesUsed = (row['ai_analyses_used'] as int?) ?? 0;
-          final raw = row['reset_date'] as String?;
-          if (raw != null) _resetDate = DateTime.tryParse(raw);
+          final raw = row['trial_ends_at'] as String?;
+          _trialEndsAt = raw != null ? DateTime.tryParse(raw) : null;
           _loadingUsage = false;
         });
       }
@@ -220,9 +220,18 @@ class _AccountSectionState extends State<_AccountSection> {
     }
   }
 
+  bool get _trialActive => _trialEndsAt != null && _trialEndsAt!.isAfter(DateTime.now());
+
+  String _trialLabel() {
+    final daysLeft = _trialEndsAt!.difference(DateTime.now()).inHours / 24;
+    return daysLeft < 1 ? 'Trial ends today' : 'Trial ends in ${daysLeft.ceil()} days';
+  }
+
+  /// Next Monday (local time) as a short label, matching the server's weekly reset.
   String _resetLabel() {
-    if (_resetDate == null) return '';
-    final next = _resetDate!.add(const Duration(days: 30));
+    final now = DateTime.now();
+    final daysUntilMonday = (8 - now.weekday) % 7 == 0 ? 7 : (8 - now.weekday) % 7;
+    final next = DateTime(now.year, now.month, now.day).add(Duration(days: daysUntilMonday));
     final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return 'Resets ${months[next.month - 1]} ${next.day}';
   }
@@ -349,35 +358,66 @@ class _AccountSectionState extends State<_AccountSection> {
               ],
             ),
 
-            if (!_isPro) ...[
+            if (!_isPro && _trialActive) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Icon(Icons.check_circle, color: AppTheme.successGreen, size: 18),
+                  const SizedBox(width: 6),
+                  const Text('Unlimited AI analyses (trial)', style: TextStyle(fontSize: 14)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(_trialLabel(), style: const TextStyle(fontSize: 12, color: AppTheme.accentOrange, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {/* TODO: open upgrade flow */},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentOrange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Keep Unlimited — Upgrade to Pro', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  '\$6.99/mo or \$49.99/year · Cancel anytime',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ),
+            ] else if (!_isPro) ...[
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('AI Analyses this month', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  const Text('AI Analyses this week', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                   if (_loadingUsage)
                     const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                   else
-                    Text('$_analysesUsed / 4', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                    Text('$_analysesUsed / 2', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                 ],
               ),
               const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: (_analysesUsed / 4).clamp(0.0, 1.0),
+                  value: (_analysesUsed / 2).clamp(0.0, 1.0),
                   backgroundColor: Colors.grey[200],
                   valueColor: AlwaysStoppedAnimation(
-                    _analysesUsed >= 4 ? AppTheme.accentOrange : AppTheme.primaryBlue,
+                    _analysesUsed >= 2 ? AppTheme.accentOrange : AppTheme.primaryBlue,
                   ),
                   minHeight: 8,
                 ),
               ),
-              if (_resetDate != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(_resetLabel(), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_resetLabel(), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+              ),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,

@@ -170,6 +170,7 @@ class _DiagnosePageState extends State<DiagnosePage>
   // Credit display (populated from server response).
   int? _creditsRemaining;
   String? _resetsOn;
+  String? _trialEndsOn;
 
   final List<_QAPair> _chatHistory = [];
   final _inputController = TextEditingController();
@@ -583,6 +584,7 @@ class _DiagnosePageState extends State<DiagnosePage>
         _creditsRemaining = insights.creditsRemaining;
         _resetsOn = insights.resetsOn;
       }
+      _trialEndsOn = insights.trialEndsOn;
     });
     _rememberAnalysis(insights);
     _advanceAnalysisPhaseAfterSuccess();
@@ -1413,6 +1415,25 @@ class _DiagnosePageState extends State<DiagnosePage>
 
   // ── Weekly credit indicator shown below the vehicle status card ──────────────
   Widget _buildCreditLabel() {
+    // Trial takes priority over weekly credit display.
+    final trialEnd = _trialEndsOn != null ? DateTime.tryParse(_trialEndsOn!) : null;
+    if (trialEnd != null && trialEnd.isAfter(DateTime.now())) {
+      final daysLeft = trialEnd.difference(DateTime.now()).inHours / 24;
+      final daysLabel = daysLeft < 1 ? 'less than a day' : '${daysLeft.ceil()} days';
+      return Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 2),
+        child: Text(
+          'Pro trial active · $daysLabel left',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 11.5,
+            color: AppTheme.accentOrange,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
     // Only show for free accounts that have received credit info from the server.
     if (_creditsRemaining == null) return const SizedBox.shrink();
     final remaining = _creditsRemaining!;
