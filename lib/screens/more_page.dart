@@ -198,7 +198,7 @@ class _AccountSectionState extends State<_AccountSection> {
 
   Future<void> _loadUsage() async {
     final user = widget.auth.currentUser;
-    if (user == null || widget.auth.isAnonymous) return;
+    if (user == null) return;
     setState(() => _loadingUsage = true);
     try {
       final row = await SupabaseService.client
@@ -236,6 +236,13 @@ class _AccountSectionState extends State<_AccountSection> {
     return 'Resets ${months[next.month - 1]} ${next.day}';
   }
 
+  String _anonymousUsageLabel() {
+    if (_loadingUsage) return 'Checking usage…';
+    final remaining = (2 - _analysesUsed).clamp(0, 2);
+    if (remaining == 0) return 'No free analyses left · create an account for more';
+    return '$remaining free ${remaining == 1 ? 'analysis' : 'analyses'} left · no account needed';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAnon = widget.auth.isAnonymous;
@@ -265,7 +272,7 @@ class _AccountSectionState extends State<_AccountSection> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('No Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('2 free AI analyses · no account needed',
+                      Text(_anonymousUsageLabel(),
                           style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                     ],
                   ),
