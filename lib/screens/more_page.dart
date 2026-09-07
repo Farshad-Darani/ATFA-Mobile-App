@@ -38,30 +38,6 @@ class _MorePageState extends State<MorePage> {
             ),
             const SizedBox(height: 16),
 
-            // ── App logo & title ──────────────────────────────────────────────
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Image.asset('assets/images/Logo.png', width: 140, height: 140),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Intelligent Automobile Diagnostic System',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Version 1.0.0',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
             _buildMenuCard(
               context: context,
               icon: Icons.settings,
@@ -109,6 +85,30 @@ class _MorePageState extends State<MorePage> {
               subtitle: 'Privacy policy and terms',
               onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => LegalPage(onNavigateToTab: widget.onNavigateToTab))),
+            ),
+            const SizedBox(height: 16),
+
+            // ── App logo & title ──────────────────────────────────────────────
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Image.asset('assets/images/Logo.png', width: 140, height: 140),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Intelligent Automobile Diagnostic System',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[500]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Version 1.0.0',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -250,6 +250,7 @@ class _AccountSectionState extends State<_AccountSection> {
 
     // ── Not signed in (anonymous) ─────────────────────────────────────────────
     if (!isSignedIn) {
+      final bool creditsUsedUp = (2 - _analysesUsed).clamp(0, 2) == 0;
       return Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
@@ -278,11 +279,14 @@ class _AccountSectionState extends State<_AccountSection> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Create a free account to unlock 2 AI analyses every week, saved history, and more.',
-                style: TextStyle(fontSize: 14, height: 1.5),
-              ),
+              // Only pitch account creation once the free analyses are actually gone.
+              if (creditsUsedUp) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  "You've used your 2 free analyses. Create a free account to unlock 2 every week, saved history, and more.",
+                  style: TextStyle(fontSize: 14, height: 1.5),
+                ),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,

@@ -93,9 +93,9 @@ class _SignUpPageState extends State<SignUpPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 16),
-          _buildCard(),
-          const SizedBox(height: 16),
           _buildFreeTierNote(),
+          const SizedBox(height: 16),
+          _buildCard(),
         ],
       ),
     );
@@ -268,7 +268,7 @@ class _SignUpPageState extends State<SignUpPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Free tier includes',
+                  '7 days of unlimited AI, free',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppTheme.primarySlate,
@@ -277,7 +277,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '5 free AI analyses · Full live data · BLE diagnostics\nUpgrade to Pro for unlimited AI — \$6.99/month',
+                  'No credit card needed. After your trial: 2 free AI analyses every week, or go unlimited with Pro for \$6.99/month.',
                   style: TextStyle(
                     color: AppTheme.primarySlate.withValues(alpha: 0.7),
                     fontSize: 12,
