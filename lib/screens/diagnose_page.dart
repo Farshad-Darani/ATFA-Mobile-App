@@ -1434,17 +1434,20 @@ class _DiagnosePageState extends State<DiagnosePage>
       );
     }
 
-    // Only show for free accounts that have received credit info from the server.
+    // Only show once credit info has been received from the server.
     if (_creditsRemaining == null) return const SizedBox.shrink();
     final remaining = _creditsRemaining!;
+    final bool isWeekly = _resetsOn != null; // null = anonymous lifetime credits
     final Color color = remaining == 0
         ? AppTheme.errorRed
         : remaining == 1
             ? const Color(0xFFF59E0B)
             : Colors.grey.shade500;
     final String label = remaining == 0
-        ? (_resetsOn != null ? 'No analyses left · resets $_resetsOn' : 'No analyses left this week')
-        : '$remaining ${remaining == 1 ? 'analysis' : 'analyses'} left this week';
+        ? (isWeekly ? 'Resets $_resetsOn' : 'Create an account for more')
+        : isWeekly
+            ? '$remaining ${remaining == 1 ? 'analysis' : 'analyses'} left this week'
+            : '$remaining free ${remaining == 1 ? 'analysis' : 'analyses'} left';
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 2),
       child: Text(

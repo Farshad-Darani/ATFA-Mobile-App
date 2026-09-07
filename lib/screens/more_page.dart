@@ -239,8 +239,8 @@ class _AccountSectionState extends State<_AccountSection> {
   String _anonymousUsageLabel() {
     if (_loadingUsage) return 'Checking usage…';
     final remaining = (2 - _analysesUsed).clamp(0, 2);
-    if (remaining == 0) return 'No free analyses left · create an account for more';
-    return '$remaining free ${remaining == 1 ? 'analysis' : 'analyses'} left · no account needed';
+    if (remaining == 0) return 'Free analyses used';
+    return '$remaining free ${remaining == 1 ? 'analysis' : 'analyses'} left';
   }
 
   @override
