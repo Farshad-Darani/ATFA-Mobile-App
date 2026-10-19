@@ -94,7 +94,10 @@ class _MorePageState extends State<MorePage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    Image.asset('assets/images/Logo.png', width: 140, height: 140),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(30),
+                      child: Image.asset('assets/images/atfa-app-icon.png', width: 140, height: 140),
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'Intelligent Automobile Diagnostic System',

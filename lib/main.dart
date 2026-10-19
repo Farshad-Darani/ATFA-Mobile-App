@@ -2,13 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'screens/main_navigation.dart';
 import 'services/supabase_service.dart';
 
+const Duration _minSplashDuration = Duration(milliseconds: 1500);
+
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  final splashStart = DateTime.now();
 
   // Initialize Supabase.
   await SupabaseService.initialize();
@@ -24,6 +29,10 @@ void main() async {
   // Do not block first frame on a network call; start anonymous session in
   // the background so iOS launch watchdog does not kill the app.
   unawaited(SupabaseService.ensureSession());
+
+  final remaining = _minSplashDuration - DateTime.now().difference(splashStart);
+  if (remaining > Duration.zero) await Future.delayed(remaining);
+  FlutterNativeSplash.remove();
 }
 
 class ATFAApp extends StatefulWidget {
@@ -64,7 +73,7 @@ class _ATFAAppState extends State<ATFAApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ATFA - Auto Diagnostic',
+      title: 'Atfa - Auto Diagnostic',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

@@ -56,6 +56,12 @@ dependencies:
   # HTTP client for Edge Function calls
   http: ^1.2.0
 
+  # Poppins brand font
+  google_fonts: ^6.2.1
+
+  # Holds the native splash for a minimum display time
+  flutter_native_splash: ^2.4.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,9 +75,6 @@ dev_dependencies:
   
   # Icon generator - generates all required app icon sizes
   flutter_launcher_icons: ^0.14.1
-  
-  # Splash screen generator
-  flutter_native_splash: ^2.4.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -92,22 +95,22 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/ATFA-Logo-BG.jpeg"
+  image_path: "assets/images/atfa-app-icon.png"
   min_sdk_android: 21
   # iOS specific - no need to remove alpha as we have background
   remove_alpha_ios: false
 
 # Splash Screen Configuration
 flutter_native_splash:
-  color: "#FFFFFF"  # White background for readability
-  image: "assets/images/Logo.png"  # transparent logo
-  color_dark: "#FFFFFF"  # white for dark mode too
-  image_dark: "assets/images/Logo.png"
+  color: "#1E293B"  # Navy background to match app icon
+  image: "assets/images/atfa-splash-logo.png"  # transparent logo
+  color_dark: "#1E293B"
+  image_dark: "assets/images/atfa-splash-logo.png"
   # Increase logo size - uses percentage of screen width (default is 0.5 = 50%)
   fullscreen: false
   android_12:
-    color: "#FFFFFF"
-    image: "assets/images/Logo.png"
+    color: "#1E293B"
+    image: "assets/images/atfa-splash-logo-android12.png"
   ios: true
   android: true
   web: false

@@ -35,10 +35,13 @@ class AboutPage extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    Image.asset(
-                      'assets/images/Logo.png',
-                      width: 120,
-                      height: 120,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(26),
+                      child: Image.asset(
+                        'assets/images/atfa-app-icon.png',
+                        width: 120,
+                        height: 120,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
