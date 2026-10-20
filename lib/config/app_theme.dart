@@ -23,6 +23,28 @@ class AppTheme {
   static const Color lightGrey = Color(0xFFF5F5F5);
   static const Color pageBackground = Color(0xFFF1F5F9);
 
+  // One per screen: the next best action. Navy text keeps contrast above 4.5:1.
+  static ButtonStyle get primaryButtonStyle => ElevatedButton.styleFrom(
+    backgroundColor: accentOrange,
+    foregroundColor: primarySlate,
+    disabledBackgroundColor: accentOrange.withValues(alpha: 0.45),
+    disabledForegroundColor: primarySlate.withValues(alpha: 0.6),
+    minimumSize: const Size(0, 52),
+    elevation: 0,
+    shadowColor: Colors.transparent,
+  );
+
+  static ButtonStyle secondaryButtonStyle(Brightness brightness) {
+    final color = brightness == Brightness.dark ? Colors.white70 : primarySlate;
+    return OutlinedButton.styleFrom(
+      foregroundColor: color,
+      side: BorderSide(color: color, width: 1.5),
+      minimumSize: const Size(0, 52),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      textStyle: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+    );
+  }
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
