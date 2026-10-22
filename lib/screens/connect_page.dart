@@ -46,7 +46,8 @@ class _ConnectPageState extends State<ConnectPage> {
 
   _ConnectIssue? _issue;
   bool _scanWhenReady = false;
-  bool _connecting = false;
+  BluetoothDevice? _connectingDevice;
+  bool get _connecting => _connectingDevice != null;
   StreamSubscription<BluetoothAdapterState>? _adapterSub;
   StreamSubscription<List<ScanResult>>? _scanSub;
   Timer? _scanTimer;
@@ -65,7 +66,6 @@ class _ConnectPageState extends State<ConnectPage> {
   @override
   void initState() {
     super.initState();
-    _restoreAdapterListener();
     
     // Set up automatic disconnection handler
     _bluetoothService.onDeviceDisconnected = _handleUnexpectedDisconnect;
@@ -84,12 +84,6 @@ class _ConnectPageState extends State<ConnectPage> {
       _showTips = !_showTips;
       if (_showTips) _currentTipIndex = 0;
     });
-  }
-
-  // Once the user has been through the flow, listening is safe (no new prompt).
-  Future<void> _restoreAdapterListener() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_introSeenKey) ?? false) _listenToAdapter();
   }
 
   void _listenToAdapter() {
@@ -278,31 +272,24 @@ class _ConnectPageState extends State<ConnectPage> {
 
   Future<void> _connectToDevice(BluetoothDevice device) async {
     if (_connecting) return;
-    _connecting = true;
+    setState(() {
+      _issue = null;
+      _connectingDevice = device;
+    });
+
     try {
       await _stopScan();
       if (!mounted) return;
 
-      setState(() => _issue = null);
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
-
-      try {
-        await _bluetoothService.connectToDevice(device);
-        if (!mounted) return;
-        Navigator.of(context).pop(); // Close loading dialog
-        setState(() => _connectedDevice = device);
-        _showSuccessSnackBar('Connected to ${device.platformName}');
-      } catch (e) {
-        if (!mounted) return;
-        Navigator.of(context).pop(); // Close loading dialog
-        setState(() => _issue = _ConnectIssue.connectFailed);
-      }
+      await _bluetoothService.connectToDevice(device);
+      if (!mounted) return;
+      setState(() => _connectedDevice = device);
+      _showSuccessSnackBar('Connected to ${device.platformName}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _issue = _ConnectIssue.connectFailed);
     } finally {
-      _connecting = false;
+      if (mounted) setState(() => _connectingDevice = null);
     }
   }
 
@@ -600,7 +587,7 @@ class _ConnectPageState extends State<ConnectPage> {
     }
 
     return ElevatedButton.icon(
-      onPressed: _isScanning ? null : _startScan,
+      onPressed: (_isScanning || _connecting) ? null : _startScan,
       style: AppTheme.primaryButtonStyle,
       icon: _isScanning
           ? const SizedBox(
@@ -670,6 +657,8 @@ class _ConnectPageState extends State<ConnectPage> {
                         final device = _discoveredDevices[index];
                         return DeviceTile(
                           device: device,
+                          isConnecting: _connectingDevice == device,
+                          enabled: !_connecting,
                           onTap: () => _connectToDevice(device),
                         );
                       },
