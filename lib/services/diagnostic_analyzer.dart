@@ -59,6 +59,8 @@ class DiagnosticAnalyzer {
     ),
   };
 
+  ParameterRange? rangeFor(String parameter) => _parameterRanges[parameter];
+
   /// Analyze a parameter value and return its status
   ParameterStatus analyzeParameter(String parameter, double value) {
     final range = _parameterRanges[parameter];

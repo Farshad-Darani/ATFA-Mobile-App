@@ -35,6 +35,11 @@ class BluetoothService {
   /// Listen to this instead of polling for instant strip state changes.
   final ValueNotifier<bool> isPaused = ValueNotifier(false);
 
+  /// True once the adapter is connected and initialised; pages listen to react instantly.
+  final ValueNotifier<bool> connectionState = ValueNotifier(false);
+
+  void _syncConnectionState() => connectionState.value = isConnected;
+
   void setPaused(bool value) => isPaused.value = value;
 
   // Disconnection callback
@@ -154,12 +159,14 @@ class BluetoothService {
         print('❌ No suitable write characteristic found');
       }
 
+      _syncConnectionState();
       return true;
     } catch (e) {
       _connectedDevice = null;
       _writeCharacteristic = null;
       _readCharacteristic = null;
       _isInitialized = false;
+      _syncConnectionState();
       rethrow;
     }
   }
@@ -215,6 +222,7 @@ class BluetoothService {
     _isInitialized = false;
     _responseBuffer = '';
     isPaused.value = false; // Reset paused state on disconnect
+    _syncConnectionState();
     
     // Notify listeners (UI) about disconnection
     if (onDeviceDisconnected != null) {

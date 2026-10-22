@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../services/ai_service.dart';
-import '../widgets/diagnostic_data_card.dart';
+import '../widgets/stat_card.dart';
 import '../widgets/gauge_widget.dart';
+import '../widgets/status_card.dart';
 import '../widgets/vehicle_health_summary.dart';
 import '../config/app_theme.dart';
 
@@ -34,8 +35,6 @@ class _LiveDataPageState extends State<LiveDataPage>
   String? _aiInsight;
   bool _aiInsightLoading = false;
   DateTime? _lastInsightFetch;
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
   late AnimationController _rotationController;
   bool _useCelsius = true; // Temperature unit preference
   bool _useKmh = true; // Speed unit preference
@@ -47,14 +46,11 @@ class _LiveDataPageState extends State<LiveDataPage>
   void initState() {
     super.initState();
     _loadPreferences();
-    // Don't auto-start - let user control when to start
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    _bluetoothService.connectionState.addListener(_onConnectionChanged);
+    // Cover an adapter that connected before this page was built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _bluetoothService.isConnected) _startDataStream();
+    });
     _rotationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -94,9 +90,20 @@ class _LiveDataPageState extends State<LiveDataPage>
     return _useCelsius ? '°C' : '°F';
   }
 
+  void _onConnectionChanged() {
+    if (!mounted) return;
+    if (_bluetoothService.connectionState.value) {
+      _startDataStream();
+    } else {
+      _stopDataStream();
+    }
+  }
+
   void _startDataStream() {
+    _dataTimer?.cancel();
     setState(() {
       _isDataStreaming = true;
+      _isPaused = false;
     });
 
     _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -190,225 +197,16 @@ class _LiveDataPageState extends State<LiveDataPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Connection Status Bar - Works for both connected and disconnected
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey[900]!.withValues(alpha: 0.92)
-                    : Colors.white.withValues(alpha: 0.88),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+            _buildStatusCard(isConnected, hasSavedSnapshot),
+            if (!isConnected) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: widget.onNavigateToConnect,
+                style: AppTheme.primaryButtonStyle,
+                icon: const Icon(Icons.bluetooth_searching),
+                label: Text(hasSavedSnapshot ? 'Reconnect' : 'Connect Adapter'),
               ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final actionWidth = constraints.maxWidth < 380 ? 132.0 : 156.0;
-
-                  return Row(
-                    children: [
-                      // Animated pulse circle when live streaming, static otherwise
-                      if (isConnected && _isDataStreaming && !_isPaused)
-                        AnimatedBuilder(
-                          animation: _pulseAnimation,
-                          builder: (context, child) {
-                            return Transform.scale(
-                              scale: 0.8 + (_pulseAnimation.value * 0.4),
-                              child: Opacity(
-                                opacity: _pulseAnimation.value,
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 12,
-                                  color: AppTheme.accentOrange,
-                                ),
-                              ),
-                            );
-                          },
-                        )
-                      else
-                        Icon(
-                          Icons.circle,
-                          size: 12,
-                          color: hasSavedSnapshot
-                              ? Colors.blueGrey[400]
-                              : _isPaused
-                                  ? Colors.grey[400]
-                                  : (isConnected
-                                      ? AppTheme.accentOrange
-                                      : Colors.grey[600]),
-                        ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          hasSavedSnapshot
-                              ? 'Saved snapshot'
-                              : _isPaused
-                                  ? 'Paused'
-                                  : (isConnected ? 'Live' : 'Offline'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: actionWidth,
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                            child: !_isDataStreaming
-                                ? ElevatedButton.icon(
-                                    key: const ValueKey('start_live'),
-                                    onPressed: isConnected
-                                        ? _startDataStream
-                                        : widget.onNavigateToConnect,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isConnected
-                                          ? AppTheme.primarySlate
-                                          : AppTheme.primarySlate,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                    icon: Icon(
-                                      isConnected
-                                          ? Icons.wifi_tethering_rounded
-                                          : Icons.bluetooth_searching_rounded,
-                                      size: 20,
-                                    ),
-                                    label: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        isConnected ? 'Start Live' : 'Connect',
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        overflow: TextOverflow.fade,
-                                      ),
-                                    ),
-                                  )
-                                : _currentData.isEmpty
-                                    ? Container(
-                                        key: const ValueKey('connecting'),
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.92),
-                                          borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(
-                                            color: AppTheme.primarySlate.withValues(alpha: 0.10),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            AnimatedBuilder(
-                                              animation: _pulseAnimation,
-                                              builder: (context, child) {
-                                                return Transform.scale(
-                                                  scale: 0.85 + (_pulseAnimation.value * 0.25),
-                                                  child: Opacity(
-                                                    opacity: _pulseAnimation.value,
-                                                    child: child,
-                                                  ),
-                                                );
-                                              },
-                                              child: Icon(
-                                                Icons.circle,
-                                                size: 10,
-                                                color: AppTheme.accentOrange,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            const Flexible(
-                                              child: FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: Text(
-                                                  'Connecting...',
-                                                  maxLines: 1,
-                                                  softWrap: false,
-                                                  overflow: TextOverflow.fade,
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : Row(
-                                        key: const ValueKey('live_controls'),
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          ElevatedButton.icon(
-                                            onPressed: _isPaused
-                                                ? _resumeDataStream
-                                                : _pauseDataStream,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: _isPaused
-                                                  ? AppTheme.primarySlate
-                                                  : Colors.white,
-                                              foregroundColor: _isPaused
-                                                  ? Colors.white
-                                                  : AppTheme.primarySlate,
-                                              elevation: 0,
-                                              side: BorderSide(
-                                                color: _isPaused
-                                                    ? AppTheme.primarySlate
-                                                    : AppTheme.primarySlate.withValues(alpha: 0.15),
-                                              ),
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 12,
-                                              ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                            icon: Icon(
-                                              _isPaused
-                                                  ? Icons.play_arrow_rounded
-                                                  : Icons.pause_rounded,
-                                              size: 18,
-                                            ),
-                                            label: Text(
-                                              _isPaused ? 'Resume' : 'Pause',
-                                              maxLines: 1,
-                                              softWrap: false,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
+            ],
             const SizedBox(height: 16),
 
             // Data Display
@@ -419,6 +217,73 @@ class _LiveDataPageState extends State<LiveDataPage>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(bool isConnected, bool hasSavedSnapshot) {
+    if (!isConnected) {
+      return hasSavedSnapshot
+          ? const StatusCard(
+              icon: Icons.history,
+              title: 'Saved snapshot',
+              subtitle: 'Last reading from this session. Adapter disconnected.',
+              color: AppTheme.secondarySlate,
+            )
+          : StatusCard(
+              icon: Icons.bluetooth_disabled,
+              title: 'Offline',
+              subtitle: 'Connect your Atfa adapter to see live data',
+              color: Colors.grey[500]!,
+            );
+    }
+    if (_isPaused) {
+      return StatusCard(
+        icon: Icons.pause_circle_outline,
+        title: 'Paused',
+        subtitle: 'Readings are frozen',
+        color: AppTheme.warningAmber,
+        highlighted: true,
+        trailing: _buildPauseButton(),
+      );
+    }
+    if (_currentData.isEmpty) {
+      return const StatusCard(
+        icon: Icons.bluetooth_connected,
+        title: 'Connected',
+        subtitle: 'Waiting for vehicle data\u2026',
+        color: AppTheme.successGreen,
+        highlighted: true,
+        pulse: true,
+      );
+    }
+    final name = _bluetoothService.connectedDevice?.platformName ?? '';
+    return StatusCard(
+      icon: Icons.sensors,
+      title: 'Live',
+      subtitle: name.isNotEmpty ? name : 'Updating every second',
+      color: AppTheme.successGreen,
+      highlighted: true,
+      pulse: true,
+      trailing: _buildPauseButton(),
+    );
+  }
+
+  // Tonal amber while paused so the button matches the card.
+  Widget _buildPauseButton() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return IconButton.filled(
+      onPressed: _isPaused ? _resumeDataStream : _pauseDataStream,
+      tooltip: _isPaused ? 'Resume' : 'Pause',
+      icon: Icon(_isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+      style: IconButton.styleFrom(
+        backgroundColor: _isPaused
+            ? AppTheme.warningAmber.withValues(alpha: 0.18)
+            : (isDark ? AppTheme.secondarySlate : AppTheme.primarySlate),
+        foregroundColor: _isPaused
+            ? AppTheme.warningAmber
+            : (isDark ? AppTheme.primarySlate : Colors.white),
+        fixedSize: const Size(44, 44),
       ),
     );
   }
@@ -455,21 +320,37 @@ class _LiveDataPageState extends State<LiveDataPage>
                   .titleMedium
                   ?.copyWith(color: Colors.grey[600]),
             )
-          else
+          else ...[
             Text(
-              'Press Start Diagnostics to begin',
+              'Live engine data appears here',
               textAlign: TextAlign.center,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
                   ?.copyWith(color: Colors.grey[600]),
             ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'RPM, speed, coolant temperature and more, as soon as your adapter is connected.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildDiagnosticDataView(bool hasSavedSnapshot) {
+    final muted = _isPaused || hasSavedSnapshot;
+    final hasErrors = (_currentData['errorCodes'] as List?)?.isNotEmpty == true;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -495,7 +376,8 @@ class _LiveDataPageState extends State<LiveDataPage>
                   value: (_currentData['rpm'] ?? 0).toDouble(),
                   maxValue: 6000,
                   unit: 'rpm',
-                  color: Theme.of(context).colorScheme.primary,
+                  color: AppTheme.accentOrange,
+                  muted: muted,
                 ),
               ),
               const SizedBox(width: 16),
@@ -505,7 +387,8 @@ class _LiveDataPageState extends State<LiveDataPage>
                   value: _convertSpeed((_currentData['speed'] ?? 0).toDouble()),
                   maxValue: _useKmh ? 160 : 100,
                   unit: _getSpeedUnit(),
-                  color: AppTheme.primarySlate,
+                  color: AppTheme.accentOrange,
+                  muted: muted,
                 ),
               ),
             ],
@@ -521,57 +404,59 @@ class _LiveDataPageState extends State<LiveDataPage>
             mainAxisSpacing: 16,
             childAspectRatio: 1.0,
             children: [
-              DiagnosticDataCard(
+              StatCard(
                 title: 'Coolant Temp',
                 value: _convertTemperature(
                   (_currentData['coolantTemp'] ?? 0).toDouble(),
                 ),
+                analysisValue: (_currentData['coolantTemp'] ?? 0).toDouble(),
+                toDisplay: _convertTemperature,
                 parameter: 'coolantTemp',
                 icon: Icons.thermostat,
+                muted: muted,
                 unit: _getTemperatureUnit(),
               ),
-              DiagnosticDataCard(
+              StatCard(
                 title: 'Throttle Position',
                 value: (_currentData['throttlePosition'] ?? 0).toDouble(),
                 parameter: 'throttlePosition',
                 icon: Icons.speed,
+                muted: muted,
               ),
-              DiagnosticDataCard(
+              StatCard(
                 title: 'Battery Voltage',
                 value: (_currentData['batteryVoltage'] ?? 0).toDouble(),
                 parameter: 'batteryVoltage',
                 icon: Icons.battery_full,
+                muted: muted,
               ),
-              DiagnosticDataCard(
+              StatCard(
                 title: 'Engine Load',
                 value: (_currentData['engineLoad'] ?? 0).toDouble(),
                 parameter: 'engineLoad',
                 icon: Icons.fitness_center,
+                muted: muted,
               ),
-              DiagnosticDataCard(
+              StatCard(
                 title: 'Intake Air Temp',
                 value: _convertTemperature(
                   (_currentData['intakeAirTemp'] ?? 0).toDouble(),
                 ),
                 parameter: 'intakeAirTemp',
                 icon: Icons.air,
+                muted: muted,
                 unit: _getTemperatureUnit(),
               ),
               Card(
                 elevation: 4,
+                color: AppTheme.primarySlate,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
-                    color:
-                        (_currentData['errorCodes'] as List?)?.isNotEmpty ==
-                            true
-                        ? AppTheme.errorRed
-                        : Colors.grey[300]!,
-                    width:
-                        (_currentData['errorCodes'] as List?)?.isNotEmpty ==
-                            true
-                        ? 3
-                        : 1,
+                    color: hasErrors && !muted
+                        ? AppTheme.errorRedLight
+                        : Colors.white.withValues(alpha: 0.08),
+                    width: hasErrors && !muted ? 2 : 1,
                   ),
                 ),
                 child: InkWell(
@@ -582,21 +467,22 @@ class _LiveDataPageState extends State<LiveDataPage>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // Stays red when muted so stored faults are never hidden.
                         Icon(
                           Icons.error_outline,
-                          color:
-                              (_currentData['errorCodes'] as List?)
-                                      ?.isNotEmpty ==
-                                  true
-                              ? AppTheme.errorRed
-                              : Colors.grey[600],
+                          color: hasErrors
+                              ? AppTheme.errorRedLight
+                              : AppTheme.secondarySlate,
                           size: 32,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Error Codes',
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 4),
@@ -605,12 +491,11 @@ class _LiveDataPageState extends State<LiveDataPage>
                           style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color:
-                                    (_currentData['errorCodes'] as List?)
-                                            ?.isNotEmpty ==
-                                        true
-                                    ? AppTheme.errorRed
-                                    : Colors.grey[600],
+                                color: muted
+                                    ? AppTheme.secondarySlate
+                                    : (hasErrors
+                                          ? AppTheme.errorRedLight
+                                          : Colors.white),
                               ),
                         ),
                       ],
@@ -889,8 +774,8 @@ class _LiveDataPageState extends State<LiveDataPage>
 
   @override
   void dispose() {
+    _bluetoothService.connectionState.removeListener(_onConnectionChanged);
     _dataTimer?.cancel();
-    _pulseController.dispose();
     _rotationController.dispose();
     super.dispose();
   }

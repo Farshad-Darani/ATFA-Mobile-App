@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart' show openAppSettings
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../widgets/device_tile.dart';
+import '../widgets/status_card.dart';
 import '../config/app_theme.dart';
 import 'contact_support_page.dart';
 
@@ -502,64 +503,15 @@ class _ConnectPageState extends State<ConnectPage> {
   }
 
   Widget _buildStatusCard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final connected = _connectedDevice != null;
-    final accent = connected ? AppTheme.successGreen : Colors.grey[500]!;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: connected
-            ? AppTheme.successGreen.withValues(alpha: 0.12)
-            : (isDark ? Colors.grey[900] : Colors.white),
-        border: Border.all(
-          color: connected
-              ? AppTheme.successGreen
-              : Colors.grey.withValues(alpha: 0.25),
-          width: 1.5,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              connected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-              color: accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  connected ? 'Connected' : 'Not connected',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  connected
-                      ? _connectedDevice!.platformName
-                      : 'No adapter connected',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return StatusCard(
+      icon: connected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+      title: connected ? 'Connected' : 'Not connected',
+      subtitle: connected
+          ? _connectedDevice!.platformName
+          : 'No adapter connected',
+      color: connected ? AppTheme.successGreen : Colors.grey[500]!,
+      highlighted: connected,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../config/app_theme.dart';
 
 class GaugeWidget extends StatelessWidget {
   const GaugeWidget({
@@ -10,6 +11,7 @@ class GaugeWidget extends StatelessWidget {
     required this.unit,
     required this.color,
     this.minValue = 0,
+    this.muted = false,
   });
 
   final String title;
@@ -18,6 +20,9 @@ class GaugeWidget extends StatelessWidget {
   final double maxValue;
   final String unit;
   final Color color;
+  final bool muted;
+
+  Color get _color => muted ? AppTheme.secondarySlate : color;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +30,7 @@ class GaugeWidget extends StatelessWidget {
     
     return Card(
       elevation: 4,
+      color: AppTheme.primarySlate,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -33,6 +39,7 @@ class GaugeWidget extends StatelessWidget {
             Text(
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.white,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,
@@ -44,7 +51,7 @@ class GaugeWidget extends StatelessWidget {
               child: CustomPaint(
                 painter: GaugePainter(
                   progress: normalizedValue,
-                  color: color,
+                  color: _color,
                 ),
                 child: Center(
                   child: Column(
@@ -55,13 +62,13 @@ class GaugeWidget extends StatelessWidget {
                         value.toStringAsFixed(0),
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: color,
+                          color: muted ? AppTheme.secondarySlate : Colors.white,
                         ),
                       ),
                       Text(
                         unit,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
+                          color: AppTheme.secondarySlate,
                         ),
                       ),
                     ],
@@ -92,7 +99,7 @@ class GaugePainter extends CustomPainter {
 
     // Background arc
     final backgroundPaint = Paint()
-      ..color = Colors.grey[300]!
+      ..color = Colors.white.withValues(alpha: 0.12)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
       ..strokeCap = StrokeCap.round;
@@ -122,7 +129,7 @@ class GaugePainter extends CustomPainter {
 
     // Draw tick marks
     final tickPaint = Paint()
-      ..color = Colors.grey[600]!
+      ..color = Colors.white.withValues(alpha: 0.35)
       ..strokeWidth = 2;
 
     for (int i = 0; i <= 10; i++) {

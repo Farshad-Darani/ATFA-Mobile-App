@@ -12,6 +12,7 @@ class AppTheme {
   // Status / Data Feedback Colors
   static const Color successGreen = Color(0xFF10B981);
   static const Color warningYellow = Color(0xFFFACC15);
+  static const Color warningAmber = Color(0xFFD97706);
   static const Color errorRed = Color(0xFFEF4444);
   
   // Additional radial/gradient colors
