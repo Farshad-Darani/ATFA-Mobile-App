@@ -93,8 +93,9 @@ class _StatCardState extends State<StatCard>
     }
   }
 
-  String _fmt(double v) =>
-      widget.parameter == 'batteryVoltage' ? v.toStringAsFixed(1) : '${v.round()}';
+  String _fmt(double v) => widget.parameter == 'batteryVoltage'
+      ? v.toStringAsFixed(1)
+      : '${v.round()}';
 
   @override
   Widget build(BuildContext context) {
@@ -104,22 +105,18 @@ class _StatCardState extends State<StatCard>
     final range = analyzer.rangeFor(widget.parameter);
 
     final level = status.level;
+    final implausible = status.implausible;
     final abnormal =
         level == diag.DiagnosticLevel.warning ||
         level == diag.DiagnosticLevel.critical;
-    // Lighter tones keep contrast on the navy surface.
-    final levelColor = level == diag.DiagnosticLevel.critical
-        ? AppTheme.errorRedLight
-        : AppTheme.warningYellow;
+    // Lighter tones keep contrast on the navy surface; grey when paused.
+    final levelColor = widget.muted
+        ? _secondary
+        : (level == diag.DiagnosticLevel.critical
+              ? AppTheme.errorRedLight
+              : AppTheme.warningYellow);
 
-    String? label;
-    if (abnormal && range != null) {
-      final high = reading > range.normal.end;
-      final severe = level == diag.DiagnosticLevel.critical;
-      label = high
-          ? (severe ? 'Very high' : 'High')
-          : (severe ? 'Very low' : 'Low');
-    }
+    final label = analyzer.levelLabel(widget.parameter, reading, level);
 
     final unit = widget.unit ?? _defaultUnit(widget.parameter);
     final convert = widget.toDisplay ?? (double v) => v;
@@ -135,6 +132,7 @@ class _StatCardState extends State<StatCard>
       levelColor: levelColor,
       label: label,
       unit: unit,
+      implausible: implausible,
     );
     final back = _buildBack(
       context,
@@ -143,7 +141,8 @@ class _StatCardState extends State<StatCard>
       levelColor: levelColor,
       label: label,
       rangeText: rangeText,
-      recommendation: level == diag.DiagnosticLevel.unknown
+      implausible: implausible,
+      recommendation: (level == diag.DiagnosticLevel.unknown && !implausible)
           ? 'No reference range is available for this reading.'
           : status.recommendation,
     );
@@ -207,94 +206,120 @@ class _StatCardState extends State<StatCard>
     required Color levelColor,
     required String? label,
     required String unit,
+    required bool implausible,
   }) {
     final theme = Theme.of(context);
-    final valueColor = widget.muted
+    final valueColor = (widget.muted || implausible)
         ? _secondary
         : (abnormal ? levelColor : Colors.white);
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Row(
+          Column(
             children: [
-              Icon(widget.icon, size: 18, color: _secondary),
-              const SizedBox(width: 6),
+              Row(
+                children: [
+                  Icon(widget.icon, size: 18, color: _secondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               Expanded(
-                child: Text(
-                  widget.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: _fmt(widget.value),
+                                    style: theme.textTheme.headlineMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: valueColor,
+                                        ),
+                                  ),
+                                  if (unit.isNotEmpty)
+                                    TextSpan(
+                                      text: ' $unit',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(color: _secondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (abnormal) ...[
+                              const SizedBox(width: 8),
+                              _statusIcon(level, levelColor, 24),
+                            ] else if (implausible) ...[
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.help_outline_rounded,
+                                size: 24,
+                                color: _secondary,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (abnormal && label != null)
+                        Text(
+                          label,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: widget.muted ? _secondary : levelColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      else if (implausible)
+                        Text(
+                          'Unlikely value',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _secondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      else if (level == diag.DiagnosticLevel.normal)
+                        Text(
+                          'Normal',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _secondary,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-              Icon(
-                Icons.info_outline,
-                size: 16,
-                color: _secondary.withValues(alpha: 0.7),
-              ),
             ],
           ),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: _fmt(widget.value),
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: valueColor,
-                                ),
-                              ),
-                              if (unit.isNotEmpty)
-                                TextSpan(
-                                  text: ' $unit',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: _secondary,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        if (abnormal) ...[
-                          const SizedBox(width: 8),
-                          _statusIcon(level, levelColor, 24),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  if (abnormal && label != null)
-                    Text(
-                      label,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: widget.muted ? _secondary : levelColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )
-                  else if (level == diag.DiagnosticLevel.normal)
-                    Text(
-                      'Normal',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _secondary,
-                      ),
-                    ),
-                ],
-              ),
+          // Low-emphasis hint that the card flips.
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Icon(
+              Icons.info_outline,
+              size: 16,
+              color: _secondary.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -309,6 +334,7 @@ class _StatCardState extends State<StatCard>
     required Color levelColor,
     required String? label,
     required String? rangeText,
+    required bool implausible,
     required String recommendation,
   }) {
     final theme = Theme.of(context);
@@ -346,6 +372,24 @@ class _StatCardState extends State<StatCard>
                     label ?? 'Out of range',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: levelColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              )
+            else if (implausible)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.help_outline_rounded,
+                    size: 18,
+                    color: _secondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Unlikely value',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

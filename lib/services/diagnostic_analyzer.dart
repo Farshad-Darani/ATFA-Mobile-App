@@ -9,9 +9,9 @@ class DiagnosticAnalyzer {
   // Automotive parameter ranges and analysis
   static const Map<String, ParameterRange> _parameterRanges = {
     'rpm': ParameterRange(
-      normal: RangeValues(700, 3000),
-      warning: RangeValues(3000, 4500),
-      critical: RangeValues(4500, 6500),
+      normal: RangeValues(700, 5000),
+      warning: RangeValues(5000, 6000),
+      critical: RangeValues(6000, 9000),
       unit: 'RPM',
       description: 'Engine Revolution Per Minute',
     ),
@@ -57,6 +57,25 @@ class DiagnosticAnalyzer {
       unit: '%',
       description: 'Fuel Level',
     ),
+    'intakeAirTemp': ParameterRange(
+      normal: RangeValues(-30, 55),
+      warning: RangeValues(55, 75),
+      critical: RangeValues(75, 120),
+      unit: '°C',
+      description: 'Intake Air Temperature',
+    ),
+  };
+
+  // Physical limits of what each sensor can report; beyond them the read is bad.
+  static const Map<String, RangeValues> _plausibleRanges = {
+    'rpm': RangeValues(0, 10000),
+    'speed': RangeValues(0, 300),
+    'coolantTemp': RangeValues(-40, 150),
+    'throttlePosition': RangeValues(0, 100),
+    'batteryVoltage': RangeValues(6, 18),
+    'engineLoad': RangeValues(0, 100),
+    'fuelLevel': RangeValues(0, 100),
+    'intakeAirTemp': RangeValues(-40, 130),
   };
 
   ParameterRange? rangeFor(String parameter) => _parameterRanges[parameter];
@@ -70,6 +89,18 @@ class DiagnosticAnalyzer {
         color: Colors.grey,
         message: 'Unknown parameter',
         recommendation: 'No analysis available',
+      );
+    }
+
+    final plausible = _plausibleRanges[parameter];
+    if (value.isNaN || (plausible != null && !_isInRange(value, plausible))) {
+      return const ParameterStatus(
+        level: DiagnosticLevel.unknown,
+        color: Colors.grey,
+        message: 'Reading looks implausible',
+        recommendation:
+            'This value is outside what the sensor can report. Check the adapter connection or the sensor.',
+        implausible: true,
       );
     }
 
@@ -95,13 +126,89 @@ class DiagnosticAnalyzer {
         recommendation: 'Continue monitoring',
       );
     } else {
-      return ParameterStatus(
-        level: DiagnosticLevel.unknown,
-        color: Colors.grey,
-        message: 'Out of expected range',
-        recommendation: 'Check sensor calibration',
+      return _outsideRanges(parameter, value, range);
+    }
+  }
+
+  /// Handles values in the gaps between ranges or past their ends.
+  ParameterStatus _outsideRanges(
+    String parameter,
+    double value,
+    ParameterRange range,
+  ) {
+    ParameterStatus normalLow(String message) => ParameterStatus(
+      level: DiagnosticLevel.normal,
+      color: Colors.grey[600]!,
+      message: message,
+      recommendation: 'Continue monitoring',
+    );
+    ParameterStatus critical(String message, String recommendation) =>
+        ParameterStatus(
+          level: DiagnosticLevel.critical,
+          color: AppTheme.errorRed,
+          message: message,
+          recommendation: recommendation,
+        );
+
+    final below = value < range.normal.start;
+
+    switch (parameter) {
+      case 'coolantTemp':
+        if (below) return normalLow('Warming up');
+        break;
+      case 'engineLoad':
+      case 'rpm':
+        if (below) return normalLow('Low');
+        break;
+      case 'batteryVoltage':
+        if (below) {
+          return critical(
+            _getCriticalMessage(parameter, value),
+            _getCriticalRecommendation(parameter),
+          );
+        }
+        if (value <= 15.0) {
+          return ParameterStatus(
+            level: DiagnosticLevel.warning,
+            color: AppTheme.warningYellow,
+            message: 'Charging voltage high: ${value.toStringAsFixed(1)}V',
+            recommendation: 'Have the charging system checked soon.',
+          );
+        }
+        return critical(
+          'Battery overcharging: ${value.toStringAsFixed(1)}V',
+          'Check alternator and voltage regulator.',
+        );
+    }
+
+    if (value > range.critical.end) {
+      return critical(
+        _getCriticalMessage(parameter, value),
+        _getCriticalRecommendation(parameter),
       );
     }
+
+    return ParameterStatus(
+      level: DiagnosticLevel.unknown,
+      color: Colors.grey,
+      message: 'Out of expected range',
+      recommendation: 'Check sensor calibration',
+    );
+  }
+
+  /// 'High', 'Very low' and so on for warning or critical readings, else null.
+  String? levelLabel(String parameter, double value, DiagnosticLevel level) {
+    final range = _parameterRanges[parameter];
+    if (range == null ||
+        (level != DiagnosticLevel.warning &&
+            level != DiagnosticLevel.critical)) {
+      return null;
+    }
+    final high = value > range.normal.end;
+    final severe = level == DiagnosticLevel.critical;
+    return high
+        ? (severe ? 'Very high' : 'High')
+        : (severe ? 'Very low' : 'Low');
   }
 
   /// Analyze overall vehicle health
@@ -112,6 +219,8 @@ class DiagnosticAnalyzer {
     int normalCount = 0;
 
     for (final entry in data.entries) {
+      // Speed is informational, not a health signal.
+      if (entry.key == 'speed') continue;
       if (entry.value is num) {
         final status = analyzeParameter(entry.key, entry.value.toDouble());
         analyses.add(status);
@@ -265,12 +374,14 @@ class ParameterStatus {
   final Color color;
   final String message;
   final String recommendation;
+  final bool implausible;
 
   const ParameterStatus({
     required this.level,
     required this.color,
     required this.message,
     required this.recommendation,
+    this.implausible = false,
   });
 }
 

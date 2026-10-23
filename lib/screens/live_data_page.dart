@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../services/ai_service.dart';
+import '../services/diagnostic_analyzer.dart' as diag;
 import '../widgets/stat_card.dart';
 import '../widgets/gauge_widget.dart';
 import '../widgets/status_card.dart';
@@ -127,6 +129,7 @@ class _LiveDataPageState extends State<LiveDataPage>
             setState(() {
               _currentData = data;
             });
+            _logReadings(data);
             _maybeRefreshInsight();
           }
         })
@@ -135,6 +138,23 @@ class _LiveDataPageState extends State<LiveDataPage>
             // Keep existing data on error, just don't update time
           }
         });
+  }
+
+  // Debug-only trace of each reading and how it is classified.
+  void _logReadings(Map<String, dynamic> data) {
+    if (!kDebugMode) return;
+    final analyzer = diag.DiagnosticAnalyzer();
+    final parts = <String>[];
+    for (final entry in data.entries) {
+      final v = entry.value;
+      if (v is num) {
+        final level = analyzer.analyzeParameter(entry.key, v.toDouble()).level;
+        parts.add('${entry.key}=$v:${level.name}');
+      } else {
+        parts.add('${entry.key}=$v');
+      }
+    }
+    debugPrint('[live] ${parts.join(' | ')}');
   }
 
   void _pauseDataStream() {
@@ -376,6 +396,7 @@ class _LiveDataPageState extends State<LiveDataPage>
                   value: (_currentData['rpm'] ?? 0).toDouble(),
                   maxValue: 6000,
                   unit: 'rpm',
+                  parameter: 'rpm',
                   color: AppTheme.accentOrange,
                   muted: muted,
                 ),
@@ -442,6 +463,8 @@ class _LiveDataPageState extends State<LiveDataPage>
                 value: _convertTemperature(
                   (_currentData['intakeAirTemp'] ?? 0).toDouble(),
                 ),
+                analysisValue: (_currentData['intakeAirTemp'] ?? 0).toDouble(),
+                toDisplay: _convertTemperature,
                 parameter: 'intakeAirTemp',
                 icon: Icons.air,
                 muted: muted,
