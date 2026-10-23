@@ -30,11 +30,6 @@ class GaugeWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalizedValue = ((value - minValue) / (maxValue - minValue)).clamp(
-      0.0,
-      1.0,
-    );
-
     final analyzer = diag.DiagnosticAnalyzer();
     final status = parameter == null
         ? null
@@ -90,31 +85,37 @@ class GaugeWidget extends StatelessWidget {
             SizedBox(
               height: 120,
               width: 120,
-              child: CustomPaint(
-                painter: GaugePainter(
-                  progress: normalizedValue,
-                  color: arcColor,
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        value.toStringAsFixed(0),
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: numberColor,
-                            ),
-                      ),
-                      Text(
-                        unit,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.secondarySlate,
+              // Glide between readings so slower updates still look continuous.
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: value),
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeOut,
+                builder: (context, shown, _) => CustomPaint(
+                  painter: GaugePainter(
+                    progress: ((shown - minValue) / (maxValue - minValue))
+                        .clamp(0.0, 1.0),
+                    color: arcColor,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          shown.toStringAsFixed(0),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: numberColor,
+                              ),
                         ),
-                      ),
-                    ],
+                        Text(
+                          unit,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppTheme.secondarySlate),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

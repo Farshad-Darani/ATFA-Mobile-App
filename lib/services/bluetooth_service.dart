@@ -12,13 +12,24 @@ class BluetoothService {
   BluetoothCharacteristic? _readCharacteristic;
   bool _isInitialized = false;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
-  
+
   // For collecting OBD responses
   String _responseBuffer = '';
   final _responseController = StreamController<String>.broadcast();
-  
+
   // Prevent overlapping data requests
   bool _isGettingData = false;
+
+  // Slow-changing sensors are read every _slowEvery cycles; the rest reuse the last value.
+  static const int _slowEvery = 5;
+  int _pollCycle = 0;
+  final Map<String, dynamic> _slowReadings = {};
+
+  // Per-notification and per-command tracing is too noisy for the polling hot path.
+  static const bool _verboseTrace = false;
+  void _trace(String message) {
+    if (kDebugMode && _verboseTrace) print(message);
+  }
 
   // Last successfully fetched data — available to any widget without a new BLE request
   Map<String, dynamic> _lastData = {};
@@ -98,13 +109,13 @@ class BluetoothService {
           if (characteristic.uuid.toString().toLowerCase().contains('fff1')) {
             _writeCharacteristic = characteristic;
             print('✅ Found write characteristic: ${characteristic.uuid}');
-            
+
             // Enable notifications on fff1 if available (common for OBD dongles)
             if (characteristic.properties.notify) {
               await characteristic.setNotifyValue(true);
               characteristic.lastValueStream.listen((value) {
                 final response = String.fromCharCodes(value);
-                print('📨 Notification received on fff1: $response');
+                _trace('📨 Notification received on fff1: $response');
                 _responseBuffer += response;
                 _responseController.add(response);
               });
@@ -115,13 +126,13 @@ class BluetoothService {
           )) {
             _readCharacteristic = characteristic;
             print('✅ Found read characteristic: ${characteristic.uuid}');
-            
+
             // Also enable notifications on fff2 if available
             if (characteristic.properties.notify) {
               await characteristic.setNotifyValue(true);
               characteristic.lastValueStream.listen((value) {
                 final response = String.fromCharCodes(value);
-                print('📨 Notification received on fff2: $response');
+                _trace('📨 Notification received on fff2: $response');
                 _responseBuffer += response;
                 _responseController.add(response);
               });
@@ -188,9 +199,12 @@ class BluetoothService {
       await _sendCommand('ATSP0');
       await Future.delayed(const Duration(milliseconds: 500));
 
+      // Aggressive adaptive timing shortens the wait for each reply.
+      await _sendCommand('ATAT2');
+
       _isInitialized = true;
       print('✅ ELM327 initialized successfully');
-      
+
       // Check error codes once during initialization
       try {
         print('🔍 Getting error codes...');
@@ -222,8 +236,10 @@ class BluetoothService {
     _isInitialized = false;
     _responseBuffer = '';
     isPaused.value = false; // Reset paused state on disconnect
+    _slowReadings.clear();
+    _pollCycle = 0;
     _syncConnectionState();
-    
+
     // Notify listeners (UI) about disconnection
     if (onDeviceDisconnected != null) {
       onDeviceDisconnected!();
@@ -241,43 +257,47 @@ class BluetoothService {
       final completer = Completer<String>();
       Timer? timeout;
       late StreamSubscription subscription;
-      
+
       // Clear buffer RIGHT BEFORE starting listener (to discard any trailing data from previous command)
       _responseBuffer = '';
-      
+
       // Start listening BEFORE sending command
       subscription = _responseController.stream.listen((data) {
         // Complete when we have a response ending with '>'
         if (_responseBuffer.contains('>')) {
           // For OBD data commands (01XX), require 41/43 response
           // For init commands (AT), accept any response
-          final isOBDCommand = command.startsWith('01') || command.startsWith('03');
-          final hasValidResponse = !isOBDCommand || 
-                                   _responseBuffer.contains('41') || 
-                                   _responseBuffer.contains('43') ||
-                                   _responseBuffer.contains('UNABLE') ||
-                                   _responseBuffer.contains('NO DATA');
-          
+          final isOBDCommand =
+              command.startsWith('01') || command.startsWith('03');
+          final hasValidResponse =
+              !isOBDCommand ||
+              _responseBuffer.contains('41') ||
+              _responseBuffer.contains('43') ||
+              _responseBuffer.contains('UNABLE') ||
+              _responseBuffer.contains('NO DATA');
+
           if (hasValidResponse && !completer.isCompleted) {
             final response = _responseBuffer.trim();
-            print('✅ Complete response received: $response');
+            _trace('✅ Complete response received: $response');
             completer.complete(response);
             timeout?.cancel();
             subscription.cancel();
           }
         }
       });
-      
+
       // NOW send command after listener is ready
       final commandBytes = '$command\r'.codeUnits;
       await _writeCharacteristic!.write(commandBytes, withoutResponse: false);
-      print('📤 Sent command: $command');
+      _trace('📤 Sent command: $command');
 
       // Set a timeout
       timeout = Timer(const Duration(seconds: 2), () {
         if (!completer.isCompleted) {
           subscription.cancel();
-          if (_responseBuffer.isNotEmpty) {
+          // A half-received OBD reply would parse as 0, so it counts as a failed read.
+          final isOBD = command.startsWith('01') || command.startsWith('03');
+          if (_responseBuffer.isNotEmpty && !isOBD) {
             print('⏱️ Timeout - returning partial response: $_responseBuffer');
             completer.complete(_responseBuffer.trim());
           } else {
@@ -290,13 +310,12 @@ class BluetoothService {
       final response = await completer.future;
       subscription.cancel();
       timeout.cancel();
-      
-      // Wait longer for all straggling notifications to finish and settle
-      await Future.delayed(Duration(milliseconds: 150));
-      
+
+      // The '>' prompt marks the end of a reply, so no settling delay is needed.
+
       // Extract only the relevant OBD response line (41/43 line)
       final cleanedResponse = _extractOBDResponse(response);
-      print('Command: $command, Raw: $response, Cleaned: $cleanedResponse');
+      _trace('Command: $command, Raw: $response, Cleaned: $cleanedResponse');
       return cleanedResponse;
     } catch (e) {
       print('Failed to send command $command: $e');
@@ -307,104 +326,63 @@ class BluetoothService {
   Future<Map<String, dynamic>> getRealTimeData() async {
     // Prevent overlapping calls
     if (_isGettingData) {
-      print('⚠️ Data request already in progress, skipping...');
+      _trace('⚠️ Data request already in progress, skipping...');
       return {};
     }
-    
+
     _isGettingData = true;
-    
+
     try {
-      print(
-        '🔄 getRealTimeData called. Connection status: ${getConnectionStatus()}',
-      );
+      _trace('🔄 getRealTimeData called. ${getConnectionStatus()}');
 
       if (!isConnected) {
         print('📱 Not connected - returning simulated data');
         return getSimulatedData();
       }
 
-      print('🚗 Connected! Attempting to get real OBD data...');
+      final cycleTimer = Stopwatch()..start();
       final data = <String, dynamic>{};
 
-      // Get Engine RPM (PID 010C)
-      try {
-        print('📊 Getting RPM...');
-        final rpmResponse = await _sendCommand('010C');
-        data['rpm'] = _parseRPM(rpmResponse);
-        print('✅ RPM: ${data['rpm']}');
-      } catch (e) {
-        print('❌ Failed to get RPM: $e');
-        data['rpm'] = 0;
-      }
-      await Future.delayed(Duration(milliseconds: 400)); // Delay between commands
+      // Fast sensors are read every cycle; a failed read keeps the last good value.
+      num lastOr(String key, num initial) =>
+          (_lastData[key] as num?) ?? initial;
+      data['rpm'] = await _readPid<num>('010C', _parseRPM, lastOr('rpm', 0));
+      data['speed'] = await _readPid<num>(
+        '010D',
+        _parseSpeed,
+        lastOr('speed', 0),
+      );
+      data['throttlePosition'] = await _readPid<num>(
+        '0111',
+        _parseThrottlePosition,
+        lastOr('throttlePosition', 0),
+      );
+      data['engineLoad'] = await _readPid<num>(
+        '0104',
+        _parseEngineLoad,
+        lastOr('engineLoad', 30),
+      );
 
-      // Get Vehicle Speed (PID 010D)
-      try {
-        final speedResponse = await _sendCommand('010D');
-        data['speed'] = _parseSpeed(speedResponse);
-      } catch (e) {
-        print('Failed to get speed: $e');
-        data['speed'] = 0;
+      // Slow sensors refresh every few cycles and reuse the last value in between.
+      if (_pollCycle % _slowEvery == 0 || _slowReadings.isEmpty) {
+        _slowReadings['coolantTemp'] = await _readPid<num>(
+          '0105',
+          _parseCoolantTemp,
+          (_slowReadings['coolantTemp'] as num?) ?? 85,
+        );
+        _slowReadings['batteryVoltage'] = await _readBatteryVoltage();
+        _slowReadings['intakeAirTemp'] = await _readPid<num>(
+          '010F',
+          _parseIAT,
+          (_slowReadings['intakeAirTemp'] as num?) ?? 20,
+        );
       }
-      await Future.delayed(Duration(milliseconds: 400));
-
-      // Get Engine Coolant Temperature (PID 0105)
-      try {
-        final tempResponse = await _sendCommand('0105');
-        data['coolantTemp'] = _parseCoolantTemp(tempResponse);
-      } catch (e) {
-        print('Failed to get coolant temp: $e');
-        data['coolantTemp'] = 85;
-      }
-      await Future.delayed(Duration(milliseconds: 400));
-
-      // Get Throttle Position (PID 0111)
-      try {
-        final throttleResponse = await _sendCommand('0111');
-        data['throttlePosition'] = _parseThrottlePosition(throttleResponse);
-      } catch (e) {
-        print('Failed to get throttle position: $e');
-        data['throttlePosition'] = 0;
-      }
-      await Future.delayed(Duration(milliseconds: 400));
-
-      // Get Engine Load (PID 0104)
-      try {
-        final loadResponse = await _sendCommand('0104');
-        data['engineLoad'] = _parseEngineLoad(loadResponse);
-      } catch (e) {
-        print('Failed to get engine load: $e');
-        data['engineLoad'] = 30;
-      }
-      await Future.delayed(Duration(milliseconds: 400));
-
-      // Get Battery Voltage — try ATRV (ELM327 direct read) first, fall back to PID 0142
-      try {
-        final atrvResponse = await _sendCommand('ATRV');
-        final atrvVoltage = _parseATRV(atrvResponse);
-        if (atrvVoltage != null) {
-          data['batteryVoltage'] = atrvVoltage;
-        } else {
-          final voltageResponse = await _sendCommand('0142');
-          data['batteryVoltage'] = _parseVoltage(voltageResponse);
-        }
-      } catch (e) {
-        print('Failed to get voltage: $e');
-        data['batteryVoltage'] = 12.4;
-      }
-      await Future.delayed(Duration(milliseconds: 400));
-
-      // Get Intake Air Temperature (PID 010F)
-      try {
-        final iatResponse = await _sendCommand('010F');
-        data['intakeAirTemp'] = _parseIAT(iatResponse);
-      } catch (e) {
-        print('Failed to get intake air temp: $e');
-        data['intakeAirTemp'] = 20;
-      }
+      _pollCycle++;
+      data.addAll(_slowReadings);
 
       // Skip error codes in real-time updates (check only on first connect)
       data['errorCodes'] = <String>[];
+      if (kDebugMode) print('⏱️ cycle ${cycleTimer.elapsedMilliseconds} ms');
 
       _lastData = Map<String, dynamic>.from(data);
       _lastDataTime = DateTime.now();
@@ -417,6 +395,31 @@ class BluetoothService {
       return sim;
     } finally {
       _isGettingData = false;
+    }
+  }
+
+  Future<T> _readPid<T>(
+    String command,
+    T Function(String) parse,
+    T fallback,
+  ) async {
+    try {
+      return parse(await _sendCommand(command));
+    } catch (e) {
+      print('Failed to read $command: $e');
+      return fallback;
+    }
+  }
+
+  // ATRV reads the adapter's own voltage; fall back to PID 0142 if it is unusable.
+  Future<double> _readBatteryVoltage() async {
+    try {
+      final atrv = _parseATRV(await _sendCommand('ATRV'));
+      if (atrv != null) return atrv;
+      return _parseVoltage(await _sendCommand('0142'));
+    } catch (e) {
+      print('Failed to get voltage: $e');
+      return (_slowReadings['batteryVoltage'] as num?)?.toDouble() ?? 12.4;
     }
   }
 

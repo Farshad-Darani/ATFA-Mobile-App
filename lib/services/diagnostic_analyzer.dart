@@ -104,6 +104,16 @@ class DiagnosticAnalyzer {
       );
     }
 
+    // Normal is checked first so an exact boundary value gets the milder status.
+    if (_isInRange(value, range.normal)) {
+      return ParameterStatus(
+        level: DiagnosticLevel.normal,
+        color: Colors.grey[600]!,
+        message: 'Normal range',
+        recommendation: 'Continue monitoring',
+      );
+    }
+
     if (_isInRange(value, range.critical)) {
       return ParameterStatus(
         level: DiagnosticLevel.critical,
@@ -117,13 +127,6 @@ class DiagnosticAnalyzer {
         color: AppTheme.warningYellow,
         message: _getWarningMessage(parameter, value),
         recommendation: _getWarningRecommendation(parameter),
-      );
-    } else if (_isInRange(value, range.normal)) {
-      return ParameterStatus(
-        level: DiagnosticLevel.normal,
-        color: Colors.grey[600]!,
-        message: 'Normal range',
-        recommendation: 'Continue monitoring',
       );
     } else {
       return _outsideRanges(parameter, value, range);
