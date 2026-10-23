@@ -195,6 +195,9 @@ class _DiagnosePageState extends State<DiagnosePage>
   Timer? _headerSyncHintTimer;
   Future<void>? _activeLoadFuture;
 
+  // Set once the server reports the limit, so polling does not keep re-asking.
+  bool _limitReached = false;
+
   // Keep short in-memory context for better follow-up analysis quality.
   final List<Map<String, dynamic>> _sampleBuffer = [];
   final List<DashboardInsights> _analysisHistory = [];
@@ -229,6 +232,7 @@ class _DiagnosePageState extends State<DiagnosePage>
         setState(() {});
         // Trigger first load automatically once live data arrives.
         if (!_hasLoaded && !_isLoading && _activeLoadFuture == null &&
+            !_limitReached &&
             _hasLiveVehicleSnapshot) {
           _loadInsights();
           return;
@@ -529,18 +533,19 @@ class _DiagnosePageState extends State<DiagnosePage>
       countAsAnalysis: isNewSession,
     );
 
-    // Limit reached — don't retry, show the appropriate modal instead
+    // Limit reached — don't retry. The sign-up sheet is switched off for now.
     if (insights.isLimitReached) {
+      _limitReached = true;
       if (mounted) {
         setState(() {
           _insights = insights;
           _isLoading = false;
           _hasLoaded = false;
         });
-        _showLimitModal(insights.isAnonymousLimit);
       }
       return;
     }
+    _limitReached = false;
 
     if (insights.isError && _retryCount < 2) {
       _retryCount++;
@@ -1552,20 +1557,40 @@ class _DiagnosePageState extends State<DiagnosePage>
   }
 
   Widget _buildErrorState() {
+    if (_insights?.isLimitReached == true) {
+      return _buildMessageState(
+        icon: Icons.hourglass_bottom_rounded,
+        title: 'You\'ve used your free analyses',
+        message:
+            'Live data, fault codes and your car\'s health score on the Live Data tab keep working as usual.',
+      );
+    }
+
     final bool isAutoRetrying = _autoRetrySecondsLeft > 0;
     final String title = isAutoRetrying
-        ? 'Reconnecting to analysis...'
-        : 'Could not load analysis right now';
+        ? 'Trying to reach the AI again...'
+        : 'Can\'t reach the AI right now';
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48),
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
         child: Column(
           children: [
             Icon(Icons.cloud_off_outlined, size: 48, color: Colors.grey[300]),
             const SizedBox(height: 12),
             Text(
               title,
-              style: TextStyle(color: Colors.grey[500], fontSize: 14),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Your car\'s live data is still working. This is usually a weak internet connection.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 12),
             if (isAutoRetrying) ...[
@@ -1600,14 +1625,47 @@ class _DiagnosePageState extends State<DiagnosePage>
     );
   }
 
+  Widget _buildMessageState({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+        child: Column(
+          children: [
+            Icon(icon, size: 48, color: Colors.grey[300]),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildConnectionRequiredState() {
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
         padding: const EdgeInsets.only(top: 8),
         child: VehicleOfflinePrompt(
-          title: 'Vehicle is offline',
-          message: 'Turn on Bluetooth and connect your vehicle before running AI diagnosis.',
+          title: 'Connect your car first',
+          message: 'The AI reads your car\'s live data, so plug in your OBD-II adapter and connect it to get a diagnosis.',
           actionLabel: 'Go to Connect',
           onAction: widget.onNavigateToConnect,
         ),

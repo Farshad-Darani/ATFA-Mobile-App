@@ -43,8 +43,9 @@ class _SignInPageState extends State<SignInPage> {
         _isLoading = false;
         _errorMessage = error;
       });
+      return;
     }
-    // On success: main.dart's StreamBuilder auto-navigates to MainNavigation.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _forgotPassword() async {
@@ -73,6 +74,13 @@ class _SignInPageState extends State<SignInPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.pageBackground,
+      appBar: AppBar(
+        backgroundColor: AppTheme.primarySlate,
+        foregroundColor: Colors.white,
+        title: const Text('Sign In'),
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -81,7 +89,7 @@ class _SignInPageState extends State<SignInPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 48),
+                const SizedBox(height: 16),
                 _buildHeader(),
                 const SizedBox(height: 40),
                 _buildCard(),
