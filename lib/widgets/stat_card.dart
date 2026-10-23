@@ -21,7 +21,7 @@ class StatCard extends StatefulWidget {
   });
 
   final String title;
-  final double value;
+  final double? value;
   final String parameter;
   final IconData icon;
   final String? unit;
@@ -93,14 +93,23 @@ class _StatCardState extends State<StatCard>
     }
   }
 
-  String _fmt(double v) => widget.parameter == 'batteryVoltage'
-      ? v.toStringAsFixed(1)
-      : '${v.round()}';
+  String _fmt(double v) {
+    const oneDecimal = {
+      'batteryVoltage',
+      'mafRate',
+      'timingAdvance',
+      'fuelTrim',
+    };
+    return oneDecimal.contains(widget.parameter)
+        ? v.toStringAsFixed(1)
+        : '${v.round()}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final analyzer = diag.DiagnosticAnalyzer();
     final reading = widget.analysisValue ?? widget.value;
+    if (reading == null) return _buildUnavailable(context);
     final status = analyzer.analyzeParameter(widget.parameter, reading);
     final range = analyzer.rangeFor(widget.parameter);
 
@@ -189,6 +198,65 @@ class _StatCardState extends State<StatCard>
     );
   }
 
+  Widget _buildUnavailable(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 4,
+      color: AppTheme.primarySlate,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(widget.icon, size: 18, color: _secondary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '\u2014',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: _secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Not available',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _secondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _statusIcon(diag.DiagnosticLevel level, Color color, double size) {
     return Icon(
       level == diag.DiagnosticLevel.critical
@@ -252,7 +320,7 @@ class _StatCardState extends State<StatCard>
                               TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: _fmt(widget.value),
+                                    text: _fmt(widget.value ?? 0),
                                     style: theme.textTheme.headlineMedium
                                         ?.copyWith(
                                           fontWeight: FontWeight.bold,

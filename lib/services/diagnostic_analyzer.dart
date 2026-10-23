@@ -64,6 +64,21 @@ class DiagnosticAnalyzer {
       unit: '°C',
       description: 'Intake Air Temperature',
     ),
+    // Analysed on the distance from zero, so -15 % and +15 % rate the same.
+    'fuelTrim': ParameterRange(
+      normal: RangeValues(0, 10),
+      warning: RangeValues(10, 20),
+      critical: RangeValues(20, 100),
+      unit: '%',
+      description: 'Fuel trim (distance from zero)',
+    ),
+    'oilTemp': ParameterRange(
+      normal: RangeValues(-40, 120),
+      warning: RangeValues(120, 140),
+      critical: RangeValues(140, 200),
+      unit: '°C',
+      description: 'Engine Oil Temperature',
+    ),
   };
 
   // Physical limits of what each sensor can report; beyond them the read is bad.
@@ -76,6 +91,8 @@ class DiagnosticAnalyzer {
     'engineLoad': RangeValues(0, 100),
     'fuelLevel': RangeValues(0, 100),
     'intakeAirTemp': RangeValues(-40, 130),
+    'fuelTrim': RangeValues(0, 100),
+    'oilTemp': RangeValues(-40, 215),
   };
 
   ParameterRange? rangeFor(String parameter) => _parameterRanges[parameter];
@@ -209,6 +226,7 @@ class DiagnosticAnalyzer {
     }
     final high = value > range.normal.end;
     final severe = level == DiagnosticLevel.critical;
+    if (parameter == 'fuelTrim') return severe ? 'Far off' : 'Off target';
     return high
         ? (severe ? 'Very high' : 'High')
         : (severe ? 'Very low' : 'Low');
@@ -222,8 +240,8 @@ class DiagnosticAnalyzer {
     int normalCount = 0;
 
     for (final entry in data.entries) {
-      // Speed is informational, not a health signal.
-      if (entry.key == 'speed') continue;
+      // Speed and fuel level are informational, not engine-health signals.
+      if (entry.key == 'speed' || entry.key == 'fuelLevel') continue;
       if (entry.value is num) {
         final status = analyzeParameter(entry.key, entry.value.toDouble());
         analyses.add(status);
@@ -308,6 +326,10 @@ class DiagnosticAnalyzer {
         return 'Reduce throttle, check transmission.';
       case 'fuelLevel':
         return 'Refuel immediately to avoid engine damage.';
+      case 'fuelTrim':
+        return 'The engine is correcting the fuel mixture heavily. Have it checked for an air leak or fuel delivery fault.';
+      case 'oilTemp':
+        return 'Stop and let the engine cool. Check the oil level.';
       default:
         return 'Seek immediate professional diagnosis.';
     }
@@ -323,6 +345,10 @@ class DiagnosticAnalyzer {
         return 'Consider reducing load or checking engine.';
       case 'fuelLevel':
         return 'Plan to refuel soon.';
+      case 'fuelTrim':
+        return 'The engine is adjusting fuel more than usual. Worth a check if it persists.';
+      case 'oilTemp':
+        return 'Oil is running hot. Ease off and check the oil level.';
       default:
         return 'Monitor parameter closely.';
     }

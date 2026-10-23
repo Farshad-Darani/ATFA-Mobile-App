@@ -5,7 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../services/ai_service.dart';
 import '../services/diagnostic_analyzer.dart' as diag;
+import '../services/dtc_descriptions.dart';
 import '../widgets/stat_card.dart';
+import '../widgets/engine_codes_card.dart';
+import '../widgets/engine_codes_sheet.dart';
 import '../widgets/gauge_widget.dart';
 import '../widgets/status_card.dart';
 import '../widgets/vehicle_health_summary.dart';
@@ -352,9 +355,58 @@ class _LiveDataPageState extends State<LiveDataPage>
     );
   }
 
+  double? _num(String key) => (_currentData[key] as num?)?.toDouble();
+
+  Widget _plainCard(
+    String key,
+    String title,
+    IconData icon,
+    bool muted, {
+    String? unit,
+  }) {
+    return StatCard(
+      title: title,
+      value: _num(key),
+      parameter: key,
+      icon: icon,
+      muted: muted,
+      unit: unit,
+    );
+  }
+
+  // Fuel trims are signed; they are rated on how far they sit from zero.
+  Widget _trimCard(String key, String title, bool muted) {
+    final trim = _num(key);
+    return StatCard(
+      title: title,
+      value: trim,
+      analysisValue: trim?.abs(),
+      parameter: 'fuelTrim',
+      icon: Icons.tune,
+      muted: muted,
+      unit: '%',
+    );
+  }
+
+  // Temperatures are analysed in Celsius and shown in the chosen unit.
+  Widget _tempCard(String key, String title, IconData icon, bool muted) {
+    final celsius = _num(key);
+    return StatCard(
+      title: title,
+      value: celsius == null ? null : _convertTemperature(celsius),
+      analysisValue: celsius,
+      toDisplay: _convertTemperature,
+      parameter: key,
+      icon: icon,
+      muted: muted,
+      unit: _getTemperatureUnit(),
+    );
+  }
+
   Widget _buildDiagnosticDataView(bool hasSavedSnapshot) {
     final muted = _isPaused || hasSavedSnapshot;
-    final hasErrors = (_currentData['errorCodes'] as List?)?.isNotEmpty == true;
+    final supported = _bluetoothService.supportedPids;
+    bool shows(int pid) => supported == null || supported.contains(pid);
 
     return SingleChildScrollView(
       child: Column(
@@ -378,7 +430,7 @@ class _LiveDataPageState extends State<LiveDataPage>
               Expanded(
                 child: GaugeWidget(
                   title: 'RPM',
-                  value: (_currentData['rpm'] ?? 0).toDouble(),
+                  value: _num('rpm'),
                   maxValue: 6000,
                   unit: 'rpm',
                   parameter: 'rpm',
@@ -390,7 +442,9 @@ class _LiveDataPageState extends State<LiveDataPage>
               Expanded(
                 child: GaugeWidget(
                   title: 'Speed',
-                  value: _convertSpeed((_currentData['speed'] ?? 0).toDouble()),
+                  value: _num('speed') == null
+                      ? null
+                      : _convertSpeed(_num('speed')!),
                   maxValue: _useKmh ? 160 : 100,
                   unit: _getSpeedUnit(),
                   color: AppTheme.accentOrange,
@@ -401,7 +455,7 @@ class _LiveDataPageState extends State<LiveDataPage>
           ),
           const SizedBox(height: 16),
 
-          // Diagnostic data cards grid
+          // Cards are hidden for sensors the car does not report.
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -410,569 +464,89 @@ class _LiveDataPageState extends State<LiveDataPage>
             mainAxisSpacing: 16,
             childAspectRatio: 1.0,
             children: [
-              StatCard(
-                title: 'Coolant Temp',
-                value: _convertTemperature(
-                  (_currentData['coolantTemp'] ?? 0).toDouble(),
+              if (shows(0x05))
+                _tempCard(
+                  'coolantTemp',
+                  'Coolant Temp',
+                  Icons.thermostat,
+                  muted,
                 ),
-                analysisValue: (_currentData['coolantTemp'] ?? 0).toDouble(),
-                toDisplay: _convertTemperature,
-                parameter: 'coolantTemp',
-                icon: Icons.thermostat,
-                muted: muted,
-                unit: _getTemperatureUnit(),
-              ),
-              StatCard(
-                title: 'Throttle Position',
-                value: (_currentData['throttlePosition'] ?? 0).toDouble(),
-                parameter: 'throttlePosition',
-                icon: Icons.speed,
-                muted: muted,
-              ),
-              StatCard(
-                title: 'Battery Voltage',
-                value: (_currentData['batteryVoltage'] ?? 0).toDouble(),
-                parameter: 'batteryVoltage',
-                icon: Icons.battery_full,
-                muted: muted,
-              ),
-              StatCard(
-                title: 'Engine Load',
-                value: (_currentData['engineLoad'] ?? 0).toDouble(),
-                parameter: 'engineLoad',
-                icon: Icons.fitness_center,
-                muted: muted,
-              ),
-              StatCard(
-                title: 'Intake Air Temp',
-                value: _convertTemperature(
-                  (_currentData['intakeAirTemp'] ?? 0).toDouble(),
+              if (shows(0x11))
+                _plainCard(
+                  'throttlePosition',
+                  'Throttle Position',
+                  Icons.speed,
+                  muted,
                 ),
-                analysisValue: (_currentData['intakeAirTemp'] ?? 0).toDouble(),
-                toDisplay: _convertTemperature,
-                parameter: 'intakeAirTemp',
-                icon: Icons.air,
+              _plainCard(
+                'batteryVoltage',
+                'Battery Voltage',
+                Icons.battery_full,
+                muted,
+              ),
+              if (shows(0x04))
+                _plainCard(
+                  'engineLoad',
+                  'Engine Load',
+                  Icons.fitness_center,
+                  muted,
+                ),
+              if (shows(0x0F))
+                _tempCard('intakeAirTemp', 'Intake Air Temp', Icons.air, muted),
+              EngineCodesCard(
                 muted: muted,
-                unit: _getTemperatureUnit(),
+                onTap: () =>
+                    showEngineCodesSheet(context, describe: describeDtc),
               ),
-              Card(
-                elevation: 4,
-                color: AppTheme.primarySlate,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(
-                    color: hasErrors && !muted
-                        ? AppTheme.errorRedLight
-                        : Colors.white.withValues(alpha: 0.08),
-                    width: hasErrors && !muted ? 2 : 1,
-                  ),
+              if (shows(0x2F))
+                _plainCard(
+                  'fuelLevel',
+                  'Fuel Level',
+                  Icons.local_gas_station,
+                  muted,
                 ),
-                child: InkWell(
-                  onTap: () => _showErrorCodes(),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Stays red when muted so stored faults are never hidden.
-                        Icon(
-                          Icons.error_outline,
-                          color: hasErrors
-                              ? AppTheme.errorRedLight
-                              : AppTheme.secondarySlate,
-                          size: 32,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Error Codes',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${(_currentData['errorCodes'] as List?)?.length ?? 0}',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: muted
-                                    ? AppTheme.secondarySlate
-                                    : (hasErrors
-                                          ? AppTheme.errorRedLight
-                                          : Colors.white),
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
+              if (shows(0x5C))
+                _tempCard('oilTemp', 'Oil Temp', Icons.oil_barrel, muted),
+              if (shows(0x06))
+                _trimCard('shortTermFuelTrim', 'Short Fuel Trim', muted),
+              if (shows(0x07))
+                _trimCard('longTermFuelTrim', 'Long Fuel Trim', muted),
+              if (shows(0x10))
+                _plainCard(
+                  'mafRate',
+                  'Air Flow',
+                  Icons.waves,
+                  muted,
+                  unit: 'g/s',
                 ),
-              ),
+              if (shows(0x0B))
+                _plainCard(
+                  'manifoldPressure',
+                  'Manifold Pressure',
+                  Icons.compress,
+                  muted,
+                  unit: 'kPa',
+                ),
+              if (shows(0x0E))
+                _plainCard(
+                  'timingAdvance',
+                  'Ignition Timing',
+                  Icons.timer_outlined,
+                  muted,
+                  unit: '°',
+                ),
+              if (shows(0x46))
+                _tempCard(
+                  'ambientTemp',
+                  'Outside Temp',
+                  Icons.wb_sunny_outlined,
+                  muted,
+                ),
             ],
           ),
         ],
       ),
     );
-  }
-
-  void _showErrorCodes() {
-    final errorCodes = _currentData['errorCodes'] as List<String>? ?? [];
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Diagnostic Error Codes'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: errorCodes.isEmpty
-              ? const Text('No error codes detected.')
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: errorCodes.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      leading: const Icon(
-                        Icons.error,
-                        color: AppTheme.errorRed,
-                      ),
-                      title: Text(errorCodes[index]),
-                      subtitle: Text(_getErrorDescription(errorCodes[index])),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getErrorDescription(String code) {
-    switch (code) {
-      // ── Fuel & Air Metering ──────────────────────────────────────────
-      case 'P0100':
-        return 'Mass or Volume Air Flow Circuit Malfunction';
-      case 'P0101':
-        return 'Mass Air Flow Circuit Range/Performance';
-      case 'P0102':
-        return 'Mass Air Flow Circuit Low Input';
-      case 'P0103':
-        return 'Mass Air Flow Circuit High Input';
-      case 'P0104':
-        return 'Mass Air Flow Circuit Intermittent';
-      case 'P0105':
-        return 'Manifold Absolute Pressure Circuit Malfunction';
-      case 'P0106':
-        return 'MAP Circuit Range/Performance';
-      case 'P0107':
-        return 'MAP Circuit Low Input';
-      case 'P0108':
-        return 'MAP Circuit High Input';
-      case 'P0110':
-        return 'Intake Air Temperature Circuit Malfunction';
-      case 'P0111':
-        return 'Intake Air Temperature Circuit Range/Performance';
-      case 'P0112':
-        return 'Intake Air Temperature Circuit Low Input';
-      case 'P0113':
-        return 'Intake Air Temperature Circuit High Input';
-      case 'P0115':
-        return 'Engine Coolant Temperature Circuit Malfunction';
-      case 'P0116':
-        return 'Engine Coolant Temperature Circuit Range/Performance';
-      case 'P0117':
-        return 'Engine Coolant Temperature Circuit Low Input';
-      case 'P0118':
-        return 'Engine Coolant Temperature Circuit High Input';
-      case 'P0120':
-        return 'Throttle Position Sensor A Circuit Malfunction';
-      case 'P0121':
-        return 'Throttle Position Sensor A Range/Performance';
-      case 'P0122':
-        return 'Throttle Position Sensor A Circuit Low Input';
-      case 'P0123':
-        return 'Throttle Position Sensor A Circuit High Input';
-      case 'P0125':
-        return 'Insufficient Coolant Temperature for Closed Loop Fuel Control';
-      case 'P0128':
-        return 'Coolant Thermostat Below Regulating Temperature';
-      case 'P0130':
-        return 'O2 Sensor Circuit Malfunction (Bank 1, Sensor 1)';
-      case 'P0131':
-        return 'O2 Sensor Circuit Low Voltage (Bank 1, Sensor 1)';
-      case 'P0132':
-        return 'O2 Sensor Circuit High Voltage (Bank 1, Sensor 1)';
-      case 'P0133':
-        return 'O2 Sensor Circuit Slow Response (Bank 1, Sensor 1)';
-      case 'P0134':
-        return 'O2 Sensor Circuit No Activity (Bank 1, Sensor 1)';
-      case 'P0135':
-        return 'O2 Sensor Heater Circuit Malfunction (Bank 1, Sensor 1)';
-      case 'P0136':
-        return 'O2 Sensor Circuit Malfunction (Bank 1, Sensor 2)';
-      case 'P0137':
-        return 'O2 Sensor Circuit Low Voltage (Bank 1, Sensor 2)';
-      case 'P0138':
-        return 'O2 Sensor Circuit High Voltage (Bank 1, Sensor 2)';
-      case 'P0139':
-        return 'O2 Sensor Circuit Slow Response (Bank 1, Sensor 2)';
-      case 'P0140':
-        return 'O2 Sensor Circuit No Activity (Bank 1, Sensor 2)';
-      case 'P0141':
-        return 'O2 Sensor Heater Circuit Malfunction (Bank 1, Sensor 2)';
-      case 'P0150':
-        return 'O2 Sensor Circuit Malfunction (Bank 2, Sensor 1)';
-      case 'P0151':
-        return 'O2 Sensor Circuit Low Voltage (Bank 2, Sensor 1)';
-      case 'P0152':
-        return 'O2 Sensor Circuit High Voltage (Bank 2, Sensor 1)';
-      case 'P0153':
-        return 'O2 Sensor Circuit Slow Response (Bank 2, Sensor 1)';
-      case 'P0155':
-        return 'O2 Sensor Heater Circuit Malfunction (Bank 2, Sensor 1)';
-      case 'P0156':
-        return 'O2 Sensor Circuit Malfunction (Bank 2, Sensor 2)';
-      case 'P0158':
-        return 'O2 Sensor Circuit High Voltage (Bank 2, Sensor 2)';
-      case 'P0161':
-        return 'O2 Sensor Heater Circuit Malfunction (Bank 2, Sensor 2)';
-
-      // ── Fuel System ──────────────────────────────────────────────────
-      case 'P0170':
-        return 'Fuel Trim Malfunction (Bank 1)';
-      case 'P0171':
-        return 'System Too Lean (Bank 1)';
-      case 'P0172':
-        return 'System Too Rich (Bank 1)';
-      case 'P0173':
-        return 'Fuel Trim Malfunction (Bank 2)';
-      case 'P0174':
-        return 'System Too Lean (Bank 2)';
-      case 'P0175':
-        return 'System Too Rich (Bank 2)';
-      case 'P0190':
-        return 'Fuel Rail Pressure Sensor Circuit Malfunction';
-      case 'P0191':
-        return 'Fuel Rail Pressure Sensor Circuit Range/Performance';
-      case 'P0192':
-        return 'Fuel Rail Pressure Sensor Circuit Low Input';
-      case 'P0193':
-        return 'Fuel Rail Pressure Sensor Circuit High Input';
-
-      // ── Misfire ───────────────────────────────────────────────────────
-      case 'P0300':
-        return 'Random/Multiple Cylinder Misfire Detected';
-      case 'P0301':
-        return 'Cylinder 1 Misfire Detected';
-      case 'P0302':
-        return 'Cylinder 2 Misfire Detected';
-      case 'P0303':
-        return 'Cylinder 3 Misfire Detected';
-      case 'P0304':
-        return 'Cylinder 4 Misfire Detected';
-      case 'P0305':
-        return 'Cylinder 5 Misfire Detected';
-      case 'P0306':
-        return 'Cylinder 6 Misfire Detected';
-      case 'P0307':
-        return 'Cylinder 7 Misfire Detected';
-      case 'P0308':
-        return 'Cylinder 8 Misfire Detected';
-
-      // ── Knock & Timing ───────────────────────────────────────────────
-      case 'P0320':
-        return 'Ignition/Distributor Engine Speed Input Circuit Malfunction';
-      case 'P0325':
-        return 'Knock Sensor 1 Circuit Malfunction (Bank 1)';
-      case 'P0326':
-        return 'Knock Sensor 1 Circuit Range/Performance (Bank 1)';
-      case 'P0327':
-        return 'Knock Sensor 1 Circuit Low Input (Bank 1)';
-      case 'P0328':
-        return 'Knock Sensor 1 Circuit High Input (Bank 1)';
-      case 'P0330':
-        return 'Knock Sensor 2 Circuit Malfunction (Bank 2)';
-      case 'P0335':
-        return 'Crankshaft Position Sensor A Circuit Malfunction';
-      case 'P0336':
-        return 'Crankshaft Position Sensor A Circuit Range/Performance';
-      case 'P0340':
-        return 'Camshaft Position Sensor A Circuit Malfunction (Bank 1)';
-      case 'P0341':
-        return 'Camshaft Position Sensor A Circuit Range/Performance (Bank 1)';
-      case 'P0342':
-        return 'Camshaft Position Sensor A Circuit Low Input (Bank 1)';
-      case 'P0343':
-        return 'Camshaft Position Sensor A Circuit High Input (Bank 1)';
-      case 'P0344':
-        return 'Camshaft Position Sensor A Circuit Intermittent (Bank 1)';
-      case 'P0345':
-        return 'Camshaft Position Sensor A Circuit Malfunction (Bank 2)';
-
-      // ── Emission Controls ────────────────────────────────────────────
-      case 'P0400':
-        return 'Exhaust Gas Recirculation Flow Malfunction';
-      case 'P0401':
-        return 'Exhaust Gas Recirculation Flow Insufficient';
-      case 'P0402':
-        return 'Exhaust Gas Recirculation Flow Excessive';
-      case 'P0404':
-        return 'Exhaust Gas Recirculation Circuit Range/Performance';
-      case 'P0405':
-        return 'Exhaust Gas Recirculation Sensor A Circuit Low';
-      case 'P0406':
-        return 'Exhaust Gas Recirculation Sensor A Circuit High';
-      case 'P0410':
-        return 'Secondary Air Injection System Malfunction';
-      case 'P0420':
-        return 'Catalyst System Efficiency Below Threshold (Bank 1)';
-      case 'P0421':
-        return 'Warm Up Catalyst Efficiency Below Threshold (Bank 1)';
-      case 'P0430':
-        return 'Catalyst System Efficiency Below Threshold (Bank 2)';
-      case 'P0440':
-        return 'Evaporative Emission Control System Malfunction';
-      case 'P0441':
-        return 'Evaporative Emission Control System Incorrect Purge Flow';
-      case 'P0442':
-        return 'Evaporative Emission Control System Small Leak Detected';
-      case 'P0443':
-        return 'Evaporative Emission Control System Purge Valve Malfunction';
-      case 'P0444':
-        return 'Evaporative Emission Control System Purge Valve Open Circuit';
-      case 'P0445':
-        return 'Evaporative Emission Control System Purge Valve Shorted';
-      case 'P0446':
-        return 'Evaporative Emission Control System Vent Control Malfunction';
-      case 'P0447':
-        return 'Evaporative Emission Control System Vent Control Open Circuit';
-      case 'P0448':
-        return 'Evaporative Emission Control System Vent Control Shorted';
-      case 'P0449':
-        return 'Evaporative Emission Control System Vent Valve/Solenoid Malfunction';
-      case 'P0450':
-        return 'Evaporative Emission Control System Pressure Sensor Malfunction';
-      case 'P0451':
-        return 'Evaporative Emission Control System Pressure Sensor Range/Performance';
-      case 'P0452':
-        return 'Evaporative Emission Control System Pressure Sensor Low Input';
-      case 'P0453':
-        return 'Evaporative Emission Control System Pressure Sensor High Input';
-      case 'P0455':
-        return 'Evaporative Emission System Large Leak Detected';
-      case 'P0456':
-        return 'Evaporative Emission System Very Small Leak Detected';
-      case 'P0457':
-        return 'Evaporative Emission System Loose Fuel Cap';
-      case 'P0458':
-        return 'Evaporative Emission System Purge Valve Circuit Low';
-      case 'P0459':
-        return 'Evaporative Emission System Purge Valve Circuit High';
-      case 'P0460':
-        return 'Fuel Level Sensor Circuit Malfunction';
-      case 'P0461':
-        return 'Fuel Level Sensor Circuit Range/Performance';
-      case 'P0462':
-        return 'Fuel Level Sensor Circuit Low Input';
-      case 'P0463':
-        return 'Fuel Level Sensor Circuit High Input';
-
-      // ── Vehicle Speed & Idle ─────────────────────────────────────────
-      case 'P0500':
-        return 'Vehicle Speed Sensor Malfunction';
-      case 'P0501':
-        return 'Vehicle Speed Sensor Range/Performance';
-      case 'P0502':
-        return 'Vehicle Speed Sensor Circuit Low Input';
-      case 'P0503':
-        return 'Vehicle Speed Sensor Intermittent/Erratic/High';
-      case 'P0505':
-        return 'Idle Control System Malfunction';
-      case 'P0506':
-        return 'Idle Control System RPM Lower Than Expected';
-      case 'P0507':
-        return 'Idle Control System RPM Higher Than Expected';
-
-      // ── Transmission ─────────────────────────────────────────────────
-      case 'P0560':
-        return 'System Voltage Malfunction';
-      case 'P0562':
-        return 'System Voltage Low';
-      case 'P0563':
-        return 'System Voltage High';
-      case 'P0600':
-        return 'Serial Communication Link Malfunction';
-      case 'P0601':
-        return 'Internal Control Module Memory Check Sum Error';
-      case 'P0602':
-        return 'Control Module Programming Error';
-      case 'P0603':
-        return 'Internal Control Module Keep Alive Memory Error';
-      case 'P0604':
-        return 'Internal Control Module Random Access Memory Error';
-      case 'P0605':
-        return 'Internal Control Module Read Only Memory Error';
-      case 'P0606':
-        return 'PCM Processor Fault';
-      case 'P0700':
-        return 'Transmission Control System Malfunction';
-      case 'P0701':
-        return 'Transmission Control System Range/Performance';
-      case 'P0702':
-        return 'Transmission Control System Electrical Malfunction';
-      case 'P0703':
-        return 'Torque Converter/Brake Switch B Circuit Malfunction';
-      case 'P0705':
-        return 'Transmission Range Sensor Circuit Malfunction (PRNDL Input)';
-      case 'P0706':
-        return 'Transmission Range Sensor Circuit Range/Performance';
-      case 'P0710':
-        return 'Transmission Fluid Temperature Sensor Circuit Malfunction';
-      case 'P0711':
-        return 'Transmission Fluid Temperature Sensor Range/Performance';
-      case 'P0712':
-        return 'Transmission Fluid Temperature Sensor Circuit Low Input';
-      case 'P0713':
-        return 'Transmission Fluid Temperature Sensor Circuit High Input';
-      case 'P0715':
-        return 'Input/Turbine Speed Sensor Circuit Malfunction';
-      case 'P0720':
-        return 'Output Speed Sensor Circuit Malfunction';
-      case 'P0725':
-        return 'Engine Speed Input Circuit Malfunction';
-      case 'P0730':
-        return 'Incorrect Gear Ratio';
-      case 'P0731':
-        return 'Gear 1 Incorrect Ratio';
-      case 'P0732':
-        return 'Gear 2 Incorrect Ratio';
-      case 'P0733':
-        return 'Gear 3 Incorrect Ratio';
-      case 'P0734':
-        return 'Gear 4 Incorrect Ratio';
-      case 'P0735':
-        return 'Gear 5 Incorrect Ratio';
-      case 'P0740':
-        return 'Torque Converter Clutch Circuit Malfunction';
-      case 'P0741':
-        return 'Torque Converter Clutch Circuit Performance or Stuck Off';
-      case 'P0742':
-        return 'Torque Converter Clutch Circuit Stuck On';
-      case 'P0743':
-        return 'Torque Converter Clutch Circuit Electrical Malfunction';
-      case 'P0750':
-        return 'Shift Solenoid A Malfunction';
-      case 'P0755':
-        return 'Shift Solenoid B Malfunction';
-      case 'P0760':
-        return 'Shift Solenoid C Malfunction';
-      case 'P0765':
-        return 'Shift Solenoid D Malfunction';
-      case 'P0770':
-        return 'Shift Solenoid E Malfunction';
-
-      // ── Charging & Battery ───────────────────────────────────────────
-      case 'P0620':
-        return 'Generator Control Circuit Malfunction';
-      case 'P0621':
-        return 'Generator Lamp L Control Circuit Malfunction';
-      case 'P0622':
-        return 'Generator Field F Control Circuit Malfunction';
-
-      // ── Cooling System ───────────────────────────────────────────────
-      case 'P0480':
-        return 'Cooling Fan 1 Control Circuit Malfunction';
-      case 'P0481':
-        return 'Cooling Fan 2 Control Circuit Malfunction';
-      case 'P0482':
-        return 'Cooling Fan 3 Control Circuit Malfunction';
-      case 'P0483':
-        return 'Cooling Fan Rationality Check Malfunction';
-      case 'P0484':
-        return 'Cooling Fan Circuit Over Current';
-      case 'P0485':
-        return 'Cooling Fan Power/Ground Circuit Malfunction';
-
-      // ── Body (B) Codes ───────────────────────────────────────────────
-      case 'B0001':
-        return 'Deployment Commanded (Airbag)';
-      case 'B0002':
-        return 'Driver Frontal Stage 1 Deployment Control';
-      case 'B0010':
-        return 'Right Curtain Deployment Control';
-      case 'B0020':
-        return 'Left Curtain Deployment Control';
-      case 'B0051':
-        return 'Airbag Diagnostic Monitor Internal Failure';
-      case 'B1000':
-        return 'ECU Malfunction';
-      case 'B1001':
-        return 'Option Configuration Error';
-
-      // ── Chassis (C) Codes ────────────────────────────────────────────
-      case 'C0035':
-        return 'Left Front Wheel Speed Sensor Circuit Malfunction';
-      case 'C0036':
-        return 'Left Front Wheel Speed Sensor Circuit Range/Performance';
-      case 'C0040':
-        return 'Right Front Wheel Speed Sensor Circuit Malfunction';
-      case 'C0041':
-        return 'Right Front Wheel Speed Sensor Circuit Range/Performance';
-      case 'C0045':
-        return 'Left Rear Wheel Speed Sensor Circuit Malfunction';
-      case 'C0046':
-        return 'Left Rear Wheel Speed Sensor Circuit Range/Performance';
-      case 'C0050':
-        return 'Right Rear Wheel Speed Sensor Circuit Malfunction';
-      case 'C0051':
-        return 'Right Rear Wheel Speed Sensor Circuit Range/Performance';
-      case 'C0110':
-        return 'ABS Motor Circuit Malfunction';
-      case 'C0121':
-        return 'ABS Valve Relay Circuit Malfunction';
-      case 'C0161':
-        return 'ABS/TCS Brake Switch Circuit Malfunction';
-      case 'C0265':
-        return 'EBCM Relay Circuit Active';
-      case 'C0266':
-        return 'EBCM Relay Circuit Open/Shorted';
-      case 'C0550':
-        return 'Electronic Control Unit Malfunction';
-      case 'C0800':
-        return 'Device Power Circuit Low Voltage';
-
-      // ── Network (U) Codes ────────────────────────────────────────────
-      case 'U0001':
-        return 'High Speed CAN Communication Bus Malfunction';
-      case 'U0010':
-        return 'Medium Speed CAN Communication Bus Malfunction';
-      case 'U0073':
-        return 'Control Module Communication Bus Off';
-      case 'U0100':
-        return 'Lost Communication with ECM/PCM';
-      case 'U0101':
-        return 'Lost Communication with TCM';
-      case 'U0121':
-        return 'Lost Communication with Anti-Lock Brake System Control Module';
-      case 'U0122':
-        return 'Lost Communication with Vehicle Dynamics Control Module';
-      case 'U0155':
-        return 'Lost Communication with Instrument Panel Cluster Control Module';
-      case 'U0164':
-        return 'Lost Communication with HVAC Control Module';
-      case 'U0401':
-        return 'Invalid Data Received from ECM/PCM';
-
-      default:
-        return 'Unknown fault code — consult a mechanic';
-    }
   }
 
   @override

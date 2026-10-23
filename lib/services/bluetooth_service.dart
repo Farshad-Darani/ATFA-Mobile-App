@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
+import 'dtc_parser.dart';
+import 'obd_parser.dart';
 
 class BluetoothService {
   static final BluetoothService _instance = BluetoothService._internal();
@@ -20,9 +22,20 @@ class BluetoothService {
   // Prevent overlapping data requests
   bool _isGettingData = false;
 
-  // Slow-changing sensors are read every _slowEvery cycles; the rest reuse the last value.
+  /// Latest check-engine light and fault codes; null until the first read.
+  final ValueNotifier<DtcStatus?> dtcStatus = ValueNotifier(null);
+  bool? _isCan;
+  int? _lastDtcCount;
+  DateTime? _lastDtcRead;
+  static const Duration _dtcRefreshEvery = Duration(seconds: 60);
+
+  // Slow-changing sensors are read a couple per cycle in turn (everything on the
+  // first pass); the rest reuse the last value. Battery and fault codes run every
+  // _slowEvery cycles.
   static const int _slowEvery = 5;
+  static const int _slowPerCycle = 1;
   int _pollCycle = 0;
+  int _slowCursor = 0;
   final Map<String, dynamic> _slowReadings = {};
 
   // Per-notification and per-command tracing is too noisy for the polling hot path.
@@ -204,15 +217,6 @@ class BluetoothService {
 
       _isInitialized = true;
       print('✅ ELM327 initialized successfully');
-
-      // Check error codes once during initialization
-      try {
-        print('🔍 Getting error codes...');
-        final errorCodes = await _getErrorCodes();
-        print('✅ Error codes: $errorCodes');
-      } catch (e) {
-        print('Failed to get error codes: $e');
-      }
     } catch (e) {
       print('❌ Failed to initialize ELM327: $e');
       _isInitialized = false;
@@ -238,6 +242,13 @@ class BluetoothService {
     isPaused.value = false; // Reset paused state on disconnect
     _slowReadings.clear();
     _pollCycle = 0;
+    _slowCursor = 0;
+    _isCan = null;
+    _supportedPids = null;
+    _supportAttempts = 0;
+    _lastDtcCount = null;
+    _lastDtcRead = null;
+    dtcStatus.value = null;
     _syncConnectionState();
 
     // Notify listeners (UI) about disconnection
@@ -247,7 +258,17 @@ class BluetoothService {
     print('✅ Disconnection handled');
   }
 
-  Future<String> _sendCommand(String command) async {
+  static bool _isObdRequest(String command) =>
+      RegExp(r'^[0-9A-F]{2}', caseSensitive: false).hasMatch(command);
+
+  // A request for mode N is answered with mode N + 0x40 (03 -> 43, 0101 -> 41).
+  static String _replySid(String command) =>
+      (int.parse(command.substring(0, 2), radix: 16) + 0x40)
+          .toRadixString(16)
+          .toUpperCase()
+          .padLeft(2, '0');
+
+  Future<String> _sendCommand(String command, {bool raw = false}) async {
     if (_writeCharacteristic == null) {
       throw Exception('No write characteristic available');
     }
@@ -265,14 +286,12 @@ class BluetoothService {
       subscription = _responseController.stream.listen((data) {
         // Complete when we have a response ending with '>'
         if (_responseBuffer.contains('>')) {
-          // For OBD data commands (01XX), require 41/43 response
+          // For OBD requests, require the matching reply (mode + 0x40)
           // For init commands (AT), accept any response
-          final isOBDCommand =
-              command.startsWith('01') || command.startsWith('03');
+          final isOBDCommand = _isObdRequest(command);
           final hasValidResponse =
               !isOBDCommand ||
-              _responseBuffer.contains('41') ||
-              _responseBuffer.contains('43') ||
+              _responseBuffer.contains(_replySid(command)) ||
               _responseBuffer.contains('UNABLE') ||
               _responseBuffer.contains('NO DATA');
 
@@ -296,7 +315,7 @@ class BluetoothService {
         if (!completer.isCompleted) {
           subscription.cancel();
           // A half-received OBD reply would parse as 0, so it counts as a failed read.
-          final isOBD = command.startsWith('01') || command.startsWith('03');
+          final isOBD = _isObdRequest(command);
           if (_responseBuffer.isNotEmpty && !isOBD) {
             print('⏱️ Timeout - returning partial response: $_responseBuffer');
             completer.complete(_responseBuffer.trim());
@@ -316,7 +335,7 @@ class BluetoothService {
       // Extract only the relevant OBD response line (41/43 line)
       final cleanedResponse = _extractOBDResponse(response);
       _trace('Command: $command, Raw: $response, Cleaned: $cleanedResponse');
-      return cleanedResponse;
+      return raw ? response : cleanedResponse;
     } catch (e) {
       print('Failed to send command $command: $e');
       throw Exception('Failed to send command: $e');
@@ -343,45 +362,34 @@ class BluetoothService {
       final cycleTimer = Stopwatch()..start();
       final data = <String, dynamic>{};
 
-      // Fast sensors are read every cycle; a failed read keeps the last good value.
-      num lastOr(String key, num initial) =>
-          (_lastData[key] as num?) ?? initial;
-      data['rpm'] = await _readPid<num>('010C', _parseRPM, lastOr('rpm', 0));
-      data['speed'] = await _readPid<num>(
-        '010D',
-        _parseSpeed,
-        lastOr('speed', 0),
-      );
-      data['throttlePosition'] = await _readPid<num>(
-        '0111',
-        _parseThrottlePosition,
-        lastOr('throttlePosition', 0),
-      );
-      data['engineLoad'] = await _readPid<num>(
-        '0104',
-        _parseEngineLoad,
-        lastOr('engineLoad', 30),
-      );
+      if (_supportedPids == null && _supportAttempts < 3) {
+        _supportAttempts++;
+        await _discoverSupportedPids();
+      }
 
-      // Slow sensors refresh every few cycles and reuse the last value in between.
-      if (_pollCycle % _slowEvery == 0 || _slowReadings.isEmpty) {
-        _slowReadings['coolantTemp'] = await _readPid<num>(
-          '0105',
-          _parseCoolantTemp,
-          (_slowReadings['coolantTemp'] as num?) ?? 85,
-        );
+      // Fast sensors are read every cycle, slow ones a few at a time.
+      for (final sensor in _sensors) {
+        if (sensor.fast) data[sensor.key] = await _readSensor(sensor);
+      }
+      final slow = _sensors.where((s) => !s.fast && _supports(s.pid)).toList();
+      final slowCount = _slowReadings.isEmpty
+          ? slow.length
+          : (slow.length < _slowPerCycle ? slow.length : _slowPerCycle);
+      for (var i = 0; i < slowCount; i++) {
+        final sensor = slow[_slowCursor % slow.length];
+        _slowCursor++;
+        _slowReadings[sensor.key] = await _readSensor(sensor);
+      }
+      if (_pollCycle % _slowEvery == 0) {
         _slowReadings['batteryVoltage'] = await _readBatteryVoltage();
-        _slowReadings['intakeAirTemp'] = await _readPid<num>(
-          '010F',
-          _parseIAT,
-          (_slowReadings['intakeAirTemp'] as num?) ?? 20,
-        );
+        await _refreshDtcsIfNeeded();
       }
       _pollCycle++;
       data.addAll(_slowReadings);
 
-      // Skip error codes in real-time updates (check only on first connect)
-      data['errorCodes'] = <String>[];
+      final dtc = dtcStatus.value;
+      data['errorCodes'] = List<String>.from(dtc?.stored ?? const <String>[]);
+      data['milOn'] = dtc?.milOn;
       if (kDebugMode) print('⏱️ cycle ${cycleTimer.elapsedMilliseconds} ms');
 
       _lastData = Map<String, dynamic>.from(data);
@@ -398,95 +406,82 @@ class BluetoothService {
     }
   }
 
-  Future<T> _readPid<T>(
-    String command,
-    T Function(String) parse,
-    T fallback,
-  ) async {
+  static final List<_Sensor> _sensors = [
+    _Sensor('rpm', 0x0C, parseRpm, fast: true),
+    _Sensor('speed', 0x0D, parseSpeed, fast: true),
+    _Sensor('throttlePosition', 0x11, parseThrottle, fast: true),
+    _Sensor('engineLoad', 0x04, parseEngineLoad, fast: true),
+    _Sensor('coolantTemp', 0x05, parseCoolantTemp),
+    _Sensor('intakeAirTemp', 0x0F, parseIntakeAirTemp),
+    _Sensor('fuelLevel', 0x2F, parseFuelLevel),
+    _Sensor('shortTermFuelTrim', 0x06, parseShortTermFuelTrim),
+    _Sensor('longTermFuelTrim', 0x07, parseLongTermFuelTrim),
+    _Sensor('mafRate', 0x10, parseMafRate),
+    _Sensor('manifoldPressure', 0x0B, parseManifoldPressure),
+    _Sensor('timingAdvance', 0x0E, parseTimingAdvance),
+    _Sensor('oilTemp', 0x5C, parseOilTemp),
+    _Sensor('ambientTemp', 0x46, parseAmbientTemp),
+  ];
+
+  Set<int>? _supportedPids;
+  int _supportAttempts = 0;
+
+  /// PIDs the car says it supports; null until known or if it never answered.
+  Set<int>? get supportedPids =>
+      _supportedPids == null ? null : Set.unmodifiable(_supportedPids!);
+
+  // Unknown support counts as supported so a silent adapter still gets tried.
+  bool _supports(int pid) =>
+      _supportedPids == null || _supportedPids!.contains(pid);
+
+  static String _pidCommand(int pid) =>
+      '01${pid.toRadixString(16).toUpperCase().padLeft(2, '0')}';
+
+  Future<void> _discoverSupportedPids() async {
+    final found = <int>{};
+    var answered = false;
+    for (var base = 0x00; base <= 0x60; base += 0x20) {
+      final block = parseSupportedPids(await _tryRaw(_pidCommand(base)), base);
+      if (block == null) break;
+      answered = true;
+      found.addAll(block.pids);
+      if (!block.hasNext) break;
+    }
+    _supportedPids = answered ? found : null;
+    if (kDebugMode) {
+      print(
+        '\u{1F50E} Supported PIDs: ${found.map((p) => p.toRadixString(16)).toList()}',
+      );
+    }
+  }
+
+  // Null for unsupported sensors; a failed read keeps the last good value.
+  Future<num?> _readSensor(_Sensor sensor) async {
+    if (!_supports(sensor.pid)) return null;
     try {
-      return parse(await _sendCommand(command));
+      final reply = await _sendCommand(_pidCommand(sensor.pid), raw: true);
+      return sensor.parse(reply) ?? (_lastData[sensor.key] as num?);
     } catch (e) {
-      print('Failed to read $command: $e');
-      return fallback;
+      print('Failed to read ${sensor.key}: $e');
+      return _lastData[sensor.key] as num?;
     }
   }
 
   // ATRV reads the adapter's own voltage; fall back to PID 0142 if it is unusable.
-  Future<double> _readBatteryVoltage() async {
+  Future<double?> _readBatteryVoltage() async {
     try {
-      final atrv = _parseATRV(await _sendCommand('ATRV'));
+      final atrv = parseAtrv(await _sendCommand('ATRV', raw: true));
       if (atrv != null) return atrv;
-      return _parseVoltage(await _sendCommand('0142'));
+      if (_supports(0x42)) {
+        final pid = parseControlModuleVoltage(
+          await _sendCommand(_pidCommand(0x42), raw: true),
+        );
+        if (pid != null) return pid;
+      }
     } catch (e) {
       print('Failed to get voltage: $e');
-      return (_slowReadings['batteryVoltage'] as num?)?.toDouble() ?? 12.4;
     }
-  }
-
-  // Force real data attempt (bypass some checks for debugging)
-  Future<Map<String, dynamic>> forceRealDataAttempt() async {
-    if (_connectedDevice == null) {
-      throw Exception('No device connected');
-    }
-
-    print('🔧 Force attempting real data...');
-    final data = <String, dynamic>{};
-
-    try {
-      if (_writeCharacteristic != null) {
-        final rpmResponse = await _sendCommand('010C');
-        data['rpm'] = _parseRPM(rpmResponse);
-        data['status'] = 'Real data retrieved successfully!';
-      } else {
-        throw Exception('No write characteristic available');
-      }
-    } catch (e) {
-      data['status'] = 'Failed to get real data: $e';
-      data['rpm'] = 0;
-    }
-
-    return data;
-  }
-
-  // Test connection without initialization
-  Future<Map<String, dynamic>> testConnection() async {
-    final results = <String, dynamic>{};
-
-    results['hasDevice'] = _connectedDevice != null;
-    results['deviceName'] = _connectedDevice?.platformName ?? 'None';
-
-    if (_connectedDevice != null) {
-      try {
-        // Check if device is still connected
-        final isConnected = await _connectedDevice!.connectionState.first;
-        results['bluetoothConnected'] =
-            isConnected == BluetoothConnectionState.connected;
-
-        // Check services
-        if (isConnected == BluetoothConnectionState.connected) {
-          final services = await _connectedDevice!.discoverServices();
-          results['servicesCount'] = services.length;
-          results['hasWriteCharacteristic'] = _writeCharacteristic != null;
-          results['hasReadCharacteristic'] = _readCharacteristic != null;
-          results['isInitialized'] = _isInitialized;
-
-          // Try to get characteristics info
-          var charInfo = <String>[];
-          for (final service in services) {
-            for (final char in service.characteristics) {
-              charInfo.add(
-                '${char.uuid} (R:${char.properties.read}, W:${char.properties.write})',
-              );
-            }
-          }
-          results['characteristics'] = charInfo;
-        }
-      } catch (e) {
-        results['error'] = 'Connection test failed: $e';
-      }
-    }
-
-    return results;
+    return (_slowReadings['batteryVoltage'] as num?)?.toDouble();
   }
 
   // Helper function to extract OBD response from raw data
@@ -503,173 +498,98 @@ class BluetoothService {
     return rawResponse; // Fallback to original
   }
 
-  int _parseRPM(String response) {
-    // Expected format: "41 0C XX XX" where XX XX is the RPM data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 8 && parts.startsWith('410C')) {
-      final a = int.parse(parts.substring(4, 6), radix: 16);
-      final b = int.parse(parts.substring(6, 8), radix: 16);
-      return ((a * 256) + b) ~/ 4;
-    }
-    return 0;
-  }
-
-  int _parseSpeed(String response) {
-    // Expected format: "41 0D XX" where XX is the speed data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 6 && parts.startsWith('410D')) {
-      return int.parse(parts.substring(4, 6), radix: 16);
-    }
-    return 0;
-  }
-
-  int _parseCoolantTemp(String response) {
-    // Expected format: "41 05 XX" where XX is the temperature data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 6 && parts.startsWith('4105')) {
-      final temp = int.parse(parts.substring(4, 6), radix: 16);
-      return temp - 40; // Convert to Celsius
-    }
-    return 85;
-  }
-
-  double _parseThrottlePosition(String response) {
-    // Expected format: "41 11 XX" where XX is the throttle position data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 6 && parts.startsWith('4111')) {
-      final throttle = int.parse(parts.substring(4, 6), radix: 16);
-      return (throttle * 100.0) / 255.0; // Convert to percentage
-    }
-    return 0.0;
-  }
-
-  double _parseEngineLoad(String response) {
-    // Expected format: "41 04 XX" where XX is the engine load data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 6 && parts.startsWith('4104')) {
-      final load = int.parse(parts.substring(4, 6), radix: 16);
-      return (load * 100.0) / 255.0; // Convert to percentage
-    }
-    return 30.0;
-  }
-
-  // Parse ATRV response — ELM327 returns e.g. "12.4V" or "12.40V"
-  double? _parseATRV(String response) {
-    final match = RegExp(r'(\d+\.\d+)\s*[Vv]').firstMatch(response);
-    if (match != null) {
-      final v = double.tryParse(match.group(1)!);
-      // Sanity check: valid car voltage is roughly 9–16 V
-      if (v != null && v >= 9.0 && v <= 16.0) return v;
-    }
-    return null;
-  }
-
-  double _parseVoltage(String response) {
-    // Expected format: "41 42 XX XX" where XX XX is the voltage data
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 8 && parts.startsWith('4142')) {
-      final a = int.parse(parts.substring(4, 6), radix: 16);
-      final b = int.parse(parts.substring(6, 8), radix: 16);
-      return ((a * 256) + b) / 1000.0; // Convert to volts
-    }
-    return 12.4;
-  }
-
-  int _parseIAT(String response) {
-    // Expected format: "41 0F XX" — same formula as coolant temp
-    final cleanResponse = _extractOBDResponse(response);
-    final parts = cleanResponse.replaceAll(' ', '');
-    if (parts.length >= 6 && parts.startsWith('410F')) {
-      return int.parse(parts.substring(4, 6), radix: 16) - 40;
-    }
-    return 20;
-  }
-
-  Future<List<String>> _getErrorCodes() async {
+  Future<String> _tryRaw(String command) async {
     try {
-      // Mode 03: Request stored DTCs
-      final response = await _sendCommand('03');
-      return _parseDTCs(response);
-    } catch (e) {
-      print('Error getting DTCs: $e');
-      return [];
+      return await _sendCommand(command, raw: true);
+    } catch (_) {
+      return '';
     }
   }
 
-  List<String> _parseDTCs(String response) {
-    List<String> dtcs = [];
-
-    // Remove spaces and convert to uppercase
-    final cleanResponse = response.replaceAll(' ', '').toUpperCase();
-
-    // Expected format: "43" followed by number of codes, then 2-byte codes
-    // Example: "43 02 01 33 02 44" means 2 codes: P0133, P0244
-
-    if (!cleanResponse.startsWith('43')) {
-      return dtcs; // No codes or invalid response
+  // The light and code count are cheap to poll; the full lists are re-read only
+  // when they change or every minute. Runs inside a data cycle.
+  Future<void> _refreshDtcsIfNeeded() async {
+    final monitor = parseMonitorStatus(await _tryRaw('0101'));
+    final stale =
+        _lastDtcRead == null ||
+        DateTime.now().difference(_lastDtcRead!) > _dtcRefreshEvery;
+    if (stale ||
+        monitor?.dtcCount != _lastDtcCount ||
+        monitor?.milOn != dtcStatus.value?.milOn) {
+      await _readDtcLists(monitor);
     }
-
-    // Skip "43" and get the count byte (if present)
-    if (cleanResponse.length < 4) {
-      return dtcs; // Response too short
-    }
-
-    // Parse DTC codes (each DTC is 4 hex digits = 2 bytes)
-    // Start from position 4 (after "43" and count byte)
-    for (int i = 4; i < cleanResponse.length - 3; i += 4) {
-      try {
-        final code = cleanResponse.substring(i, i + 4);
-        final dtc = _decodeDTC(code);
-        if (dtc != null && dtc != 'P0000') {
-          // Ignore P0000 (no error)
-          dtcs.add(dtc);
-        }
-      } catch (e) {
-        // Skip invalid codes
-        continue;
-      }
-    }
-
-    return dtcs;
   }
 
-  String? _decodeDTC(String hexCode) {
-    if (hexCode.length != 4) return null;
+  // Needs the read lock: call from a data cycle or through _runExclusive.
+  Future<void> _readDtcLists([MonitorStatus? known]) async {
+    final monitor = known ?? parseMonitorStatus(await _tryRaw('0101'));
+    _isCan ??= isCanProtocolReply(await _tryRaw('ATDPN'));
+    final isCan = _isCan!;
 
+    final stored = parseDtcResponse(
+      await _tryRaw('03'),
+      sid: '43',
+      isCan: isCan,
+    );
+    final pending = parseDtcResponse(
+      await _tryRaw('07'),
+      sid: '47',
+      isCan: isCan,
+    );
+    final permanent = parseDtcResponse(
+      await _tryRaw('0A'),
+      sid: '4A',
+      isCan: isCan,
+    );
+
+    _lastDtcCount = monitor?.dtcCount;
+    _lastDtcRead = DateTime.now();
+    dtcStatus.value = DtcStatus(
+      stored: stored,
+      pending: pending,
+      permanent: permanent,
+      milOn: monitor?.milOn,
+      confirmedCount: monitor?.dtcCount,
+      readAt: _lastDtcRead!,
+    );
+    if (kDebugMode) {
+      print(
+        '\u{1F527} DTC mil=${monitor?.milOn} stored=$stored pending=$pending permanent=$permanent',
+      );
+    }
+  }
+
+  // Waits for any running data cycle so commands never interleave on the link.
+  Future<T?> _runExclusive<T>(Future<T> Function() action) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (_isGettingData) {
+      if (DateTime.now().isAfter(deadline)) return null;
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+    _isGettingData = true;
     try {
-      // Parse the 2 bytes
-      final byte1 = int.parse(hexCode.substring(0, 2), radix: 16);
-      final byte2 = int.parse(hexCode.substring(2, 4), radix: 16);
-
-      // First 2 bits determine the DTC type
-      final firstBits = (byte1 >> 6) & 0x03;
-      final prefix = [
-        'P',
-        'C',
-        'B',
-        'U',
-      ][firstBits]; // Powertrain, Chassis, Body, Network
-
-      // Next 2 bits are the first digit
-      final digit1 = (byte1 >> 4) & 0x03;
-
-      // Last 4 bits of first byte are the second digit
-      final digit2 = byte1 & 0x0F;
-
-      // Second byte contains the last 2 digits
-      final digit3 = (byte2 >> 4) & 0x0F;
-      final digit4 = byte2 & 0x0F;
-
-      return '$prefix$digit1${digit2.toRadixString(16).toUpperCase()}${digit3.toRadixString(16).toUpperCase()}${digit4.toRadixString(16).toUpperCase()}';
-    } catch (e) {
-      return null;
+      return await action();
+    } finally {
+      _isGettingData = false;
     }
+  }
+
+  /// Re-reads the light state and all fault-code lists now.
+  Future<void> refreshDtcs() async {
+    if (!isConnected) return;
+    await _runExclusive(() => _readDtcLists());
+  }
+
+  /// Clears stored codes and turns the light off (Mode 04).
+  /// Also resets the car's readiness tests. Returns true when the car confirmed.
+  Future<bool> clearDtcs() async {
+    if (!isConnected) return false;
+    final acknowledged = await _runExclusive(() async {
+      final reply = await _tryRaw('04');
+      await _readDtcLists();
+      return reply.replaceAll(' ', '').contains('44');
+    });
+    return acknowledged ?? false;
   }
 
   // Simulated OBD data for testing when not connected
@@ -686,4 +606,16 @@ class BluetoothService {
       'errorCodes': ['P0300', 'P0171'], // Example error codes
     };
   }
+}
+
+/// A Mode 01 sensor: where its value lives and how to decode it.
+class _Sensor {
+  const _Sensor(this.key, this.pid, this.parse, {this.fast = false});
+
+  final String key;
+  final int pid;
+  final num? Function(String reply) parse;
+
+  /// Fast sensors are read every cycle; the rest every few cycles.
+  final bool fast;
 }

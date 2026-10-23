@@ -18,7 +18,7 @@ class GaugeWidget extends StatelessWidget {
   });
 
   final String title;
-  final double value;
+  final double? value;
   final double minValue;
   final double maxValue;
   final String unit;
@@ -31,16 +31,16 @@ class GaugeWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final analyzer = diag.DiagnosticAnalyzer();
-    final status = parameter == null
+    final status = (parameter == null || value == null)
         ? null
-        : analyzer.analyzeParameter(parameter!, value);
+        : analyzer.analyzeParameter(parameter!, value!);
     final level = status?.level;
     final implausible = status?.implausible ?? false;
     final abnormal =
         level == diag.DiagnosticLevel.warning ||
         level == diag.DiagnosticLevel.critical;
     final label = abnormal
-        ? analyzer.levelLabel(parameter!, value, level!)
+        ? analyzer.levelLabel(parameter!, value!, level!)
         : null;
 
     // Lighter tones keep contrast on the navy surface; grey when paused.
@@ -52,7 +52,7 @@ class GaugeWidget extends StatelessWidget {
     final arcColor = (muted || implausible)
         ? AppTheme.secondarySlate
         : (abnormal ? levelColor : color);
-    final numberColor = (muted || implausible)
+    final numberColor = (muted || implausible || value == null)
         ? AppTheme.secondarySlate
         : (abnormal ? levelColor : Colors.white);
 
@@ -87,7 +87,7 @@ class GaugeWidget extends StatelessWidget {
               width: 120,
               // Glide between readings so slower updates still look continuous.
               child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(end: value),
+                tween: Tween<double>(end: value ?? minValue),
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.easeOut,
                 builder: (context, shown, _) => CustomPaint(
@@ -102,7 +102,7 @@ class GaugeWidget extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          shown.toStringAsFixed(0),
+                          value == null ? '\u2014' : shown.toStringAsFixed(0),
                           style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
@@ -172,7 +172,15 @@ class GaugeWidget extends StatelessWidget {
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: AppTheme.secondarySlate),
                             )
-                          : const SizedBox.shrink()),
+                          : (value == null && parameter != null
+                                ? Text(
+                                    'Not available',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: AppTheme.secondarySlate,
+                                        ),
+                                  )
+                                : const SizedBox.shrink())),
               ),
             ),
           ],
